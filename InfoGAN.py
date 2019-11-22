@@ -113,13 +113,34 @@ class InfoGAN(nn.Module):
     
     def init_losses(self):
         """Initialises the losses"""
-        # Loss functions
-        self.adversarial_loss = torch.nn.MSELoss().to(self.device)
+        # GAN Loss function
+        self.gan_loss = torch.nn.BCELoss().to(self.device)
+        # Discrete latent codes 
         self.categorical_loss = torch.nn.CrossEntropyLoss().to(self.device)
+        # Continuous latent codes
         self.continuous_loss = torch.nn.MSELoss().to(self.device)
     
     def forward(self):
         pass
+    
+
+    def noise(self, batch_size, batch_dis_classes=None):
+    
+        # he usual uninformed noise
+        z_noise = torch.empty((batch_size, self.z_dim), requires_grad=False, 
+                              device=self.device).normal_() # b, x_dim
+        
+        # discrete code noise
+        if batch_dis_classes is None:
+            batch_dis_classes = np.random.randint(0, self.dis_classes, batch_size)
+        dis_noise = np.zeros((batch_size, self.dis_classes)) 
+        dis_noise[range(batch_size), batch_dis_classes] = 1.0 # bs, dis_classes
+        
+        # continuous code noise
+        con_noise = torch.empty((batch_size, self.con_c_dim), requires_grad=False, 
+                               device=self.device).uniform_(-1, 1)
+        return z_noise, dis_noise, con_noise
+    
     
     def train_infogan(self, train_dataloader):
         """Trains an InfoGAN."""
@@ -129,41 +150,16 @@ class InfoGAN(nn.Module):
         
         # TODO: not finished yet
         for self.current_epoch in range(self.start_epoch, self.epochs):
+            self.generator.tran()
+            self.discriminator.train()
             for i, x in enumerate(train_dataloader):
                 
+                # Ground truths
                 batch_size = x.shape[0]
+                real_x = x.to(self.device)        
+                real_labels = torch.ones(batch_size, requires_grad=False, device=self.device)
+                fake_labels = torch.zeros(batch_size, requires_grad=False, device=self.device)
         
-                # Adversarial ground truths
-                valid = torch.ones(batch_size, requires_grad=False, device=self.device)
-                fake = torch.zeros(batch_size, requires_grad=False, device=self.device)
-        
-                # Configure input
-                real_x = x.to(self.device)
-                labels = to_categorical(labels.numpy(), num_columns=opt.n_classes)
-        
-                # -----------------
-                #  Train Generator
-                # -----------------
-        
-                optimizer_G.zero_grad()
-        
-                # Sample noise and labels as generator input
-                z = torch.empty((batch_size, self.latent_dim), requires_grad=False, 
-                                device=self.device).normal_()
-                label_input = to_categorical(np.random.randint(0, self.n_classes, batch_size), 
-                                             num_columns=self.n_classes)
-                code_input = torch.empty((batch_size, self.code_dim), requires_grad=False, 
-                                device=self.device).uniform_(-1, 1)
-        
-                # Generate a batch of images
-                gen_out = self.generator(z, label_input, code_input)
-        
-                # Loss measures generator's ability to fool the discriminator
-                validity, _, _ = self.discriminator(gen_out)
-                g_loss = self.adversarial_loss(validity, valid)
-        
-                g_loss.backward()
-                optimizer_G.step()
         
                 # ---------------------
                 #  Train Discriminator
@@ -173,17 +169,38 @@ class InfoGAN(nn.Module):
         
                 # Loss for real images
                 real_pred, _, _ = self.discriminator(real_x)
-                d_real_loss = self.adversarial_loss(real_pred, valid)
+                d_real_loss = self.gan_loss(real_pred, real_labels)
         
                 # Loss for fake images
-                fake_pred, _, _ = self.discriminator(gen_out.detach())
-                d_fake_loss = self.adversarial_loss(fake_pred, fake)
+                z_noise, dis_noise, con_noise = self.noise(batch_size)
+                fake_x = self.generator(z_noise, dis_noise, con_noise).detach()
+                fake_pred, _, _ = self.discriminator(fake_x)
+                d_fake_loss = self.gan_loss(fake_pred, fake_labels)
         
                 # Total discriminator loss
                 d_loss = (d_real_loss + d_fake_loss) / 2
         
                 d_loss.backward()
                 optimizer_D.step()
+
+
+                # -----------------
+                #  Train Generator
+                # -----------------
+        
+                optimizer_G.zero_grad()
+        
+                # Sample new noise and push it through the generator 
+                z_noise, dis_noise, con_noise = self.noise(batch_size)
+                fake_x = self.generator(z_noise, dis_noise, con_noise)
+        
+                # Loss measures generator's ability to fool the discriminator
+                validity, _, _ = self.discriminator(fake_x)
+                g_loss = self.gan_loss(validity, real_labels)
+        
+                g_loss.backward()
+                optimizer_G.step()
+        
         
                 # ------------------
                 # Information Loss
@@ -191,24 +208,18 @@ class InfoGAN(nn.Module):
         
                 optimizer_I.zero_grad()
         
-                # Sample labels
+                # Sampled ground truth labels
                 sampled_labels = np.random.randint(0, self.n_classes, batch_size)
-        
-                # Ground truth labels
                 gt_labels = torch.LongTensor(sampled_labels, device=model.device)
         
                 # Sample noise, labels and code as generator input
-                z = torch.empty((batch_size, self.latent_dim), requires_grad=False, 
-                                device=self.device).normal_(0, 1)
-                label_input = to_categorical(sampled_labels, num_columns=self.n_classes)
-                code_input = torch.empty((batch_size, self.code_dim), requires_grad=False, 
-                                device=self.device).uniform_(-1, 1)
+                z_noise, dis_noise, con_noise = self.noise(batch_size, batch_dis_classes=sampled_labels)
         
-                gen_out = self.generator(z, label_input, code_input)
-                _, pred_label, pred_code = self.discriminator(gen_out)
+                gen_x = self.generator(z_noise, dis_noise, con_noise)
+                _, pred_dis_code, pred_con_code = self.discriminator(gen_x)
         
-                i_loss = self.lambda_cat * self.categorical_loss(pred_label, gt_labels) + \
-                    self.lambda_con * self.continuous_loss(pred_code, code_input)
+                i_loss = self.lambda_cat * self.categorical_loss(pred_dis_code, gt_labels) + \
+                    self.lambda_con * self.continuous_loss(pred_con_code, con_noise)
         
                 i_loss.backward()
                 optimizer_I.step()
