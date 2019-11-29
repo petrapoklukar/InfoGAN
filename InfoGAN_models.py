@@ -34,16 +34,20 @@ class QNet(nn.Module):
         self.n_categorical_codes = config['n_categorical_codes']
         self.n_continuous_codes = config['n_continuous_codes']
 
-        self.continuous_layer = nn.Linear(self.last_layer_dim, self.n_continuous_codes)
-        self.categorical_layer = nn.Sequential(
+        # Model structured continuous code as Gaussian
+        self.con_layer_mean = nn.Linear(self.last_layer_dim, self.n_continuous_codes)
+        self.con_layer_logvar = nn.Linear(self.last_layer_dim, self.n_continuous_codes)
+        
+        # M´Structured categorical code
+        self.cat_layer = nn.Sequential(
                 nn.Linear(self.last_layer_dim, self.n_categorical_codes), 
                 nn.Softmax(dim=-1))
 
-
     def forward(self, x):
-        categorical_code = self.categorical_layer(x) # Structured categorical code
-        continuous_code = self.continuous_layer(x) # Structured continuous code
-        return categorical_code, continuous_code
+        cat_code = self.cat_layer(x) # Structured categorical code
+        con_code_mean = self.con_layer_mean(x) # Structured continuous code
+        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
+        return cat_code, con_code_mean, con_code_logvar
 
 
 # ---------------------------------------- #

@@ -122,22 +122,52 @@ class InfoGAN(nn.Module):
             raise NotImplementedError(
                     'Optimiser {0} not recognized'.format(optim_type))
     
+    def gaussian_loss(self, x, mean, logvar):
+        """Computes the exact Gaussian loss"""
+        HALF_LOG_TWO_PI = 0.91893
+        nonbatch_dims = list(range(1, len(x.shape)))
+        var = torch.exp(logvar)   
+        batch_loss = torch.sum(
+                HALF_LOG_TWO_PI + 0.5 * logvar + 0.5 * ((x - mean) / var) ** 2,
+                dim=nonbatch_dims) # batch_size
+        avg_loss = torch.mean(batch_loss)
+        return avg_loss
+    
     def init_losses(self):
         """Initialises the losses"""
         # GAN Loss function
         self.gan_loss = torch.nn.BCELoss().to(self.device)
         # Discrete latent codes 
         self.categorical_loss = torch.nn.CrossEntropyLoss().to(self.device)
-        # Continuous latent codes
-        self.continuous_loss = torch.nn.MSELoss().to(self.device)
+        # Continuous latent codes are model with the gaussian function above
     
-    def count_parameters(self):
+    def count_parameters(self, model):
         """Counts the total number of trainable parameters in the model."""
-        gen_params = sum(p.numel() for p in self.generator.parameters() if p.requires_grad)
-        dis_params = sum(p.numel() for p in self.discriminator.parameters() if p.requires_grad)
-        Qnet_params = sum(p.numel() for p in self.Qnet.parameters() if p.requires_grad)
-        return gen_params + dis_params + Qnet_params
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
     
+    def print_model_params(self):
+        """Prints specifications of the trainable parameters."""
+        def print_trainable_param(model, n_params):
+            print(' *- Model parameters: {0}'.format(n_params))
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    spacing = 1
+                    print('{0:>2}{1}\n\t of dimension {2}'.format('', name, spacing),  
+                          list(param.shape))
+                    
+        num_dparameters = self.count_parameters(self.discriminator) 
+        print_trainable_param(self.discriminator, num_dparameters)
+        self.config['discriminator_config']['n_model_params'] = num_dparameters
+        
+        num_gparameters = self.count_parameters(self.generator) 
+        print_trainable_param(self.generator, num_gparameters)
+        self.config['generator_config']['n_model_params'] = num_gparameters
+
+        num_iparameters = self.count_parameters(self.Qnet) 
+        print_trainable_param(self.Qnet, num_iparameters)
+        self.config['Qnet_config']['n_model_params'] = num_iparameters
+        
+
     def plot_snapshot_loss(self):
         """
         Plots discriminator, generator and Qnet losses at each snapshot 
@@ -252,17 +282,8 @@ class InfoGAN(nn.Module):
                    ' *- Remaining lr schedule: {3}'
                    ).format(self.lr, self.lr_update_epoch, self.new_lr, 
                    self.lr_schedule))            
-    
-        num_parameters = self.count_parameters() 
-        self.config['num_parameters'] = num_parameters
-        print(' *- Model parameters: {0}'.format(num_parameters))
-        
-        for name, param in self.model.named_parameters():
-            if param.requires_grad:
-                spacing = 1
-                print('{0:>2}{1}\n\t of dimension {2}'.format('', name, spacing),  
-                      list(param.shape))
-        
+
+        self.print_model_params()
         self.init_losses()
         print('\nStarting to train the model...\n' )        
         for self.current_epoch in range(self.start_epoch, self.epochs):
@@ -322,10 +343,10 @@ class InfoGAN(nn.Module):
                 # Push it through QNet
                 gen_x = self.generator(z_noise, dis_noise, con_noise)
                 _, gen_features = self.discriminator(gen_x) 
-                pred_dis_code, pred_con_code = self.QNet(gen_features)
+                pred_dis_code, pred_con_mean, pred_con_logvar = self.QNet(gen_features)
         
                 i_loss = self.lambda_cat * self.categorical_loss(pred_dis_code, gt_labels) + \
-                    self.lambda_con * self.continuous_loss(pred_con_code, con_noise)
+                    self.lambda_con * self.gaussian_loss(con_noise, pred_con_mean, pred_con_logvar)
                 
                 g_loss += i_loss 
                 g_loss.backward()

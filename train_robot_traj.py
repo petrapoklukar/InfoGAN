@@ -37,8 +37,10 @@ class TrajDataset(Dataset):
         self.device = device
         self.data = torch.from_numpy(np.load(data_filename)).float().to(self.device)
         self.num_samples = self.data.shape[0]
+        
     def __len__(self):
         return self.num_samples
+    
     def __getitem__(self, idx):
         return self.data[idx]
 
