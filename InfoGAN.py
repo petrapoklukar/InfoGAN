@@ -51,7 +51,9 @@ class InfoGAN(nn.Module):
         torch.manual_seed(train_config['random_seed'])
         np.random.seed(train_config['random_seed'])
 
-
+    # ---------------------- #
+    # --- Init functions --- #
+    # ---------------------- #
     def init_generator(self):
         """Initialises the generator."""
         try:
@@ -122,6 +124,14 @@ class InfoGAN(nn.Module):
             raise NotImplementedError(
                     'Optimiser {0} not recognized'.format(optim_type))
     
+    def init_losses(self):
+        """Initialises the losses"""
+        # GAN Loss function
+        self.gan_loss = torch.nn.BCELoss().to(self.device)
+        # Discrete latent codes 
+        self.categorical_loss = torch.nn.CrossEntropyLoss().to(self.device)
+        # Continuous latent codes are model with the gaussian function above
+    
     def gaussian_loss(self, x, mean, logvar):
         """Computes the exact Gaussian loss"""
         HALF_LOG_TWO_PI = 0.91893
@@ -132,15 +142,10 @@ class InfoGAN(nn.Module):
                 dim=nonbatch_dims) # batch_size
         avg_loss = torch.mean(batch_loss)
         return avg_loss
-    
-    def init_losses(self):
-        """Initialises the losses"""
-        # GAN Loss function
-        self.gan_loss = torch.nn.BCELoss().to(self.device)
-        # Discrete latent codes 
-        self.categorical_loss = torch.nn.CrossEntropyLoss().to(self.device)
-        # Continuous latent codes are model with the gaussian function above
-    
+
+    # ---------------------------- #
+    # --- Monitoring functions --- #
+    # ---------------------------- #    
     def count_parameters(self, model):
         """Counts the total number of trainable parameters in the model."""
         return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -166,7 +171,6 @@ class InfoGAN(nn.Module):
         num_iparameters = self.count_parameters(self.Qnet) 
         print_trainable_param(self.Qnet, num_iparameters)
         self.config['Qnet_config']['n_model_params'] = num_iparameters
-        
 
     def plot_snapshot_loss(self):
         """
@@ -226,9 +230,91 @@ class InfoGAN(nn.Module):
         reformatted = list(map(lambda x: round(x.item(), 2), losses_list))
         return np.array(reformatted)
     
-    def forward(self):
-        pass
+    def evaluate(self, data_loader):
+        """"Evaluatates the performance of a InfoGAN"""
+        self.eval()
+        assert(not self.generator.training)
+
+        sum_d_loss = 0.0
+        sum_g_loss = 0.0
+        sum_i_loss = 0.0
+
+        batch_size = data_loader.batch_size
+        latent_var = np.zeros((len(data_loader)*batch_size, self.latent_size))
+        labels = np.zeros(len(data_loader)*batch_size)
+        for i, x in enumerate(data_loader):
+            label =[]
+            if isinstance(x, list):
+                label = x[1].to(self.device)
+                x = x[0].to(self.device)
+            d_loss, g_loss, i_loss, z_noise, dis_noise, con_noise = self.forward(x)
+            
+            sum_d_loss += d_loss.item()
+            sum_g_loss += g_loss.item()
+            sum_i_loss += i_loss.item()
+
+            lv = np.copy(con_noise.detach().numpy())
+            c_batch_size = lv.shape[0]
+            latent_var[i*batch_size:i*batch_size+c_batch_size,:] = lv
+            if len(label)>0:
+                labels[i*batch_size:i*batch_size+c_batch_size] = label
+
+        print('discriminator_loss: %.6e' %(sum_d_loss / len(data_loader)))
+        print('generator_loss: %.6e' %(sum_g_loss / len(data_loader)))
+        print('Qnet_loss: %.6e' %(sum_i_loss / len(data_loader)))
+        return latent_var, labels
     
+    # -------------------------- #
+    # --- Training functions --- #
+    # -------------------------- #
+    def forward(self, x):
+        """Forward pass through InfoGAN"""
+        self.eval()
+        # Ground truths
+        batch_size = x.shape[0]
+        real_x = x.to(self.device)        
+        real_labels = torch.ones(batch_size, device=self.device)
+        fake_labels = torch.zeros(batch_size, device=self.device)
+
+        # Loss for real images
+        real_pred, _ = self.discriminator(real_x)
+        d_real_loss = self.gan_loss(real_pred, real_labels)
+
+        # Loss for fake images
+        z_noise, dis_noise, con_noise = self.noise(batch_size)
+        fake_x = self.generator(z_noise, dis_noise, con_noise).detach()
+        fake_pred = self.discriminator(fake_x)
+        d_fake_loss = self.gan_loss(fake_pred, fake_labels)
+
+        # Total discriminator loss
+        d_loss = d_real_loss + d_fake_loss
+
+        # - THE USUAL GENERATOR LOSS        
+        # Loss measures generator's ability to fool the discriminator
+        # Push fake samples through the update discriminator
+        fake_pred, fake_features = self.discriminator(fake_x)
+        g_loss = self.gan_loss(fake_pred, real_labels)
+
+        # - INFORMATION LOSS
+        # Sampled ground truth labels, see eq 5 in the paper
+        sampled_labels = np.random.randint(0, self.n_classes, batch_size)
+        gt_labels = torch.LongTensor(sampled_labels, device=model.device)
+
+        # Sample noise, labels and code as generator input
+        z_noise, dis_noise, con_noise = self.noise(
+                batch_size, batch_dis_classes=sampled_labels)
+
+        # Push it through QNet
+        gen_x = self.generator(z_noise, dis_noise, con_noise)
+        _, gen_features = self.discriminator(gen_x) 
+        pred_dis_code, pred_con_mean, pred_con_logvar = self.QNet(gen_features)
+
+        i_loss = self.lambda_cat * self.categorical_loss(pred_dis_code, gt_labels) + \
+            self.lambda_con * self.gaussian_loss(con_noise, pred_con_mean, pred_con_logvar)
+        
+        g_loss += i_loss 
+        return d_loss, g_loss, i_loss, z_noise, dis_noise, con_noise
+        
     def noise(self, batch_size, batch_dis_classes=None):
         """
         Generates uninformed noise, structured discrete noise and 
@@ -248,7 +334,6 @@ class InfoGAN(nn.Module):
         con_noise = torch.empty((batch_size, self.con_c_dim), requires_grad=False, 
                                device=self.device).uniform_(-1, 1)
         return z_noise, dis_noise, con_noise
-    
     
     def train_infogan(self, train_dataloader, chpnt_path=''):
         """Trains an InfoGAN."""
@@ -287,9 +372,9 @@ class InfoGAN(nn.Module):
         self.init_losses()
         print('\nStarting to train the model...\n' )        
         for self.current_epoch in range(self.start_epoch, self.epochs):
-            self.generator.tran()
-            self.discriminator.train()
-            self.Qnet.train()
+            self.train()
+            assert(self.generator.training)
+            
             epoch_loss = np.zeros(4)
             for i, x in enumerate(train_dataloader):
                 
@@ -386,7 +471,9 @@ class InfoGAN(nn.Module):
         torch.save(self.model.state_dict(), self.model_path)       
         self.save_logs()
         
-    
+    # ---------------------------------- #
+    # --- Saving & Loading functions --- #
+    # ---------------------------------- #
     def save_logs(self, ):
         """Saves a txt file with logs"""
         log_filename = self.save_path + '_logs.txt'
@@ -408,9 +495,7 @@ class InfoGAN(nn.Module):
     
     
     def save_checkpoint(self, epoch_loss, keep=False):
-        """
-        Saves a checkpoint during the training.
-        """
+        """Saves a checkpoint during the training."""
         if keep:
             path = self.save_path + '_checkpoint{0}.pth'.format(self.current_epoch)
             checkpoint_type = 'epoch'
@@ -480,14 +565,56 @@ class InfoGAN(nn.Module):
                 self.lr, self.lr_update_epoch, self.new_lr)
               )
         
-        self.discriminator.train()
-        self.generator.train()
-        self.Qnet.train()
+        self.train()
+#        self.discriminator.train()
+#        self.generator.train()
+#        self.Qnet.train()
+        assert(self.Qnet.training)
         
+    def load_model(self, d_filename, g_filename, q_filename):
+        """Loads a trained InfoGAN model into eval mode"""   
+        # Load the Discriminator
+        d_config = self.config['discriminator_config']
+        discriminator = getattr(InfoGAN_models, d_config['class_name'])
+        self.discriminator = discriminator(d_config).to(self.device)
+        if d_config['load_checkpoint']:
+            d_checkpoint = torch.load(d_filename, map_location=self.device)
+            self.discriminator.load_state_dict(d_checkpoint['model_state_dict'])
+            print(' *- Loaded discriminator checkpoint.')
+        else:
+            self.discriminator.load_state_dict(
+                    torch.load(d_filename, map_location=self.device))
 
+        # Load the Generator
+        g_config = self.config['generator_config']
+        Qnet = getattr(InfoGAN_models, g_config['class_name'])
+        self.generator = Qnet(g_config).to(self.device)
+        if g_config['load_checkpoint']:
+            g_checkpoint = torch.load(g_filename, map_location=self.device)
+            self.generator.load_state_dict(g_checkpoint['model_state_dict'])
+            print(' *- Loaded checkpoint.')
+        else:
+            self.generator.load_state_dict(
+                    torch.load(g_filename, map_location=self.device))
 
+        # Load the QNet            
+        Qnet_config = self.config['Qnet_config']
+        Qnet = getattr(InfoGAN_models, Qnet_config['class_name'])
+        self.Qnet = Qnet(Qnet_config).to(self.device)
+        if Qnet_config['load_checkpoint']:
+            Qnet_checkpoint = torch.load(q_filename, map_location=self.device)
+            self.Qnet.load_state_dict(Qnet_checkpoint['model_state_dict'])
+            print(' *- Loaded checkpoint.')
+        else:
+            self.Qnet.load_state_dict(
+                    torch.load(q_filename, map_location=self.device))
+        
+        self.eval()
+        assert(not self.generator.training)
 
-
+# --------------- #
+# --- Testing --- #
+# --------------- #
 if __name__ == '__main__':
     
     config = {
