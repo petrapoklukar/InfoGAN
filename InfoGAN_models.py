@@ -33,21 +33,32 @@ class QNet(nn.Module):
         self.last_layer_dim = config['last_layer_dim']
         self.n_categorical_codes = data_config['structured_cat_dim']
         self.n_continuous_codes = data_config['structured_con_dim']
-
+        self.forward_pass = self.continous_forward
+        
         # Model structured continuous code as Gaussian
         self.con_layer_mean = nn.Linear(self.last_layer_dim, self.n_continuous_codes)
         self.con_layer_logvar = nn.Linear(self.last_layer_dim, self.n_continuous_codes)
         
-        # M´Structured categorical code
-        self.cat_layer = nn.Sequential(
-                nn.Linear(self.last_layer_dim, self.n_categorical_codes), 
-                nn.Softmax(dim=-1))
-
-    def forward(self, x):
+        if self.n_categorical_codes > 0:
+            # Structured categorical code
+            self.forward_pass = self.full_forward
+            self.cat_layer = nn.Sequential(
+                    nn.Linear(self.last_layer_dim, self.n_categorical_codes), 
+                    nn.Softmax(dim=-1))
+    
+    def continous_forward(self, x):
+        con_code_mean = self.con_layer_mean(x) # Structured continuous code
+        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
+        return con_code_mean, con_code_logvar
+    
+    def full_forward(self, x):
         cat_code = self.cat_layer(x) # Structured categorical code
         con_code_mean = self.con_layer_mean(x) # Structured continuous code
         con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
         return cat_code, con_code_mean, con_code_logvar
+
+    def forward(self, x):
+        return self.forward_pass(x)
 
 
 # ---------------------------------------- #
@@ -58,8 +69,9 @@ class FullyConnectedGenerator(nn.Module):
         super(FullyConnectedGenerator, self).__init__()
         self.gen_config = gen_config
         self.layer_dims = gen_config['layer_dims']
-        self.data_config = data_config
+        self.n_categorical_codes = data_config['structured_cat_dim']
         self.layer_dims.append(data_config['input_size'])
+        self.layer_dims.insert(0, data_config['total_noise'])
         
         self.generator = nn.Sequential()
         for i in range(1, len(self.layer_dims) - 1):
@@ -72,8 +84,8 @@ class FullyConnectedGenerator(nn.Module):
                 self.layer_dims[-2], self.layer_dims[-1]))
 #        self.generator.add_module('tanh_last', nn.Tanh())
     
-    def forward(self, noise, labels, code):
-        gen_input = torch.cat((noise, labels, code), -1)
+    def forward(self, *args):
+        gen_input = torch.cat((*args), -1)
         out = self.generator(gen_input)
         return out
 
@@ -198,7 +210,7 @@ if __name__ == '__main__':
         def __getitem__(self, idx):
             return self.data[idx]
 
-    def noise(batch_size, config, batch_dis_classes=None):
+    def full_noise(batch_size, config, batch_dis_classes=None):
         """
         Generates uninformed noise, structured discrete noise and 
         structured continuous noise.
@@ -223,6 +235,24 @@ if __name__ == '__main__':
         con_noise = torch.empty((batch_size, con_c_dim), requires_grad=False, 
                                device=device).uniform_(-1, 1)
         return z_noise, dis_noise, con_noise
+    
+    def con_noise(batch_size, config):
+        """
+        Generates uninformed noise, structured discrete noise and 
+        structured continuous noise.
+        """
+        z_dim = config['usual_noise_dim']
+        con_c_dim = config['structured_con_dim']
+        device = 'cpu'
+        
+        # the usual uninformed noise
+        z_noise = torch.empty((batch_size, z_dim), requires_grad=False, 
+                              device=device).normal_() # b, x_dim
+
+        # structured continuous code noise
+        con_noise = torch.empty((batch_size, con_c_dim), requires_grad=False, 
+                               device=device).uniform_(-1, 1)
+        return z_noise, con_noise
 
     path_to_data = 'dataset/robot_trajectories/yumi_joint_pose.npy'
     data = TrajDataset(path_to_data)
@@ -231,10 +261,12 @@ if __name__ == '__main__':
     data_config = {
             'input_size': 553,
             'usual_noise_dim': 1,
-            'structured_cat_dim': 2, 
+            'structured_cat_dim': 0, 
             'structured_con_dim': 6,
+            'total_noise': 7
             }
-            
+    noise_fn = full_noise if data_config['structured_cat_dim'] > 0 else con_noise        
+    
     discriminator_config =  {
             'class_name': 'FullyConnectedDiscriminator',
             'layer_dims': [1000, 500, 250, 250, 50]
@@ -246,14 +278,12 @@ if __name__ == '__main__':
     
     generator_config = {
             'class_name': 'FullyConnectedGenerator',
-            'layer_dims': [9, 128, 256, 256, 512]
+            'layer_dims': [128, 256, 256, 512]
             }
     generator = FullyConnectedGenerator(generator_config, data_config)
-    z_noise, dis_noise, con_noise = noise(64, data_config)
-    print(' *- z_noise.shape ', z_noise.shape)
-    print(' *- dis_noise.shape ', dis_noise.shape)
-    print(' *- con_noise.shape ', con_noise.shape)
-    g_out = generator(z_noise, dis_noise, con_noise)
+    noise = noise_fn(64, data_config)
+    print(' *- noise.shape ', list(map(lambda x: x.shape, noise)))
+    g_out = generator(noise)
     print(' *- g_out.shape ', g_out.shape)
     
     Qnet_config = {
@@ -261,7 +291,5 @@ if __name__ == '__main__':
             'last_layer_dim': 50,
             }
     qnet = QNet(Qnet_config, data_config)
-    q_out_cat_code, q_out_con_code_mean, q_out_con_code_logvar = qnet(d_out[1])
-    print(' *- q_out_cat_code.shape ', q_out_cat_code.shape)
-    print(' *- q_out_con_code_mean.shape ', q_out_con_code_mean.shape)
-    print(' *- q_out_con_code_logvar.shape ', q_out_con_code_logvar.shape)
+    q_out = qnet(d_out[1])
+    print(' *- q_out.shape ', list(map(lambda x: x.shape, q_out)))

@@ -10,8 +10,10 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import InfoGAN_models
-import InfoGAN as model
+import InfoGAN_cont as model
 
+import matplotlib
+matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 import numpy as np
 from importlib.machinery import SourceFileLoader
@@ -45,11 +47,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # TESTING
-    args.config_name = 'InfoGAN_test'
+    args.config_name = 'InfoGAN_cont_test'
     args.path_to_data = 'dataset/robot_trajectories/yumi_joint_pose.npy'
     args.device = None
-    args.train = True
-    args.eval = None
+    args.train = None
+    args.eval = True
     
     config_file = os.path.join('.', 'configs', args.config_name + '.py')
     export_directory = os.path.join('.', 'models', args.config_name)
@@ -76,11 +78,10 @@ if __name__ == '__main__':
                                    shuffle=True, num_workers=0)
     traj_iter = iter(trajectory_loader)
     x = traj_iter.next().to('cpu').numpy()
+    batch_size, n_joints, traj_length = x.shape
     config_file['data_config']['data_batch_shape'] = x.shape
-    config_file['data_config']['input_size'] = np.prod(x.shape[1:])
+    config_file['data_config']['input_size'] = n_joints*traj_length
 
-    n_joints = x.shape[1]
-    traj_length = x.shape[2]
 
     # Init the model
     model = model.InfoGAN(config_file)
@@ -94,22 +95,40 @@ if __name__ == '__main__':
         eval_config = config_file['eval_config']
         if not args.train:
             model.load_model(eval_config)
-        lv, _ = model.evaluate(trajectory_loader)
-
-        # TODO: Sample fixed structured noise and visualize few generated data
-#        z,_ = v_autoencoder.encode(x)
-#        xhat = v_autoencoder.decode(z).reshape(x.shape)
-#
-#        nsample = min(x.shape[0],5)
-#        x = x[:nsample, :, :]
-#        xhat = xhat[:nsample, : ,:]
-#
-#
-#        #traj = x[:nsample].reshape(-1,traj_length)
-#        #traj_hat = xhat[:nsample].reshape(-1,traj_length)
-#        for i in range(nsample):
-#            plt.subplot(nsample,1,i+1)
-#            for j in range(7):
-#                plt.plot(x[i][0], x[i][j+1], color='b')
-#                plt.plot(x[i][0], xhat[i][j+1], color='r')
-#        plt.show()
+        
+        # Fix usual noise and sample structured continous noise
+        n_samples = eval_config['n_test_samples']
+        fix_z_noise = torch.empty((1, model.z_dim), device=model.device).normal_()
+        fix_z_noise = fix_z_noise.expand((n_samples, model.z_dim))
+        sampled_cont_noise = model.sample_fixed_noise(
+                n_samples, model.con_c_dim, ntype='uniform')
+        gen_con_samples = model.generator(
+                (fix_z_noise, sampled_cont_noise)).view(-1, n_joints, traj_length)
+        gen_con_samples = gen_con_samples.detach().view(-1, n_joints, traj_length)
+        
+        plt.figure(1)
+        for i in range(n_samples):
+            plt.subplot(n_samples, 1, i+1)
+            for j in range(6):
+                plt.plot(x[i][0], x[i][j+1], color='b')
+                plt.plot(x[i][0], gen_con_samples[i][j+1], color='r')
+        plt.show()
+        plt.savefig(eval_config['savefig_path'] + 'fixedUsualNoise')
+        
+        # Fix the structured noise and sample usual noise
+        fix_cont_noise = torch.empty((1, model.con_c_dim), device=model.device).normal_()
+        fix_cont_noise = fix_cont_noise.expand((n_samples, model.con_c_dim))
+        sampled_z_noise = model.sample_fixed_noise(
+                n_samples, model.z_dim, ntype='normal')
+        gen_nor_samples = model.generator((sampled_z_noise, fix_cont_noise))
+        gen_nor_samples = gen_nor_samples.detach().view(-1, n_joints, traj_length)
+        
+        plt.figure(2)
+        for i in range(n_samples):
+            plt.subplot(n_samples, 1, i+1)
+            for j in range(6):
+                plt.plot(x[i][0], x[i][j+1], color='b')
+                plt.plot(x[i][0], gen_nor_samples[i][j+1], color='r')
+        plt.show()
+        plt.savefig(eval_config['savefig_path'] + 'fixedStructuredNoise')
+    

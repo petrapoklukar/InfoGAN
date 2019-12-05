@@ -5,7 +5,8 @@ Created on Thu Nov 21 14:21:00 2019
 
 @author: petrapoklukar
 
-Added tips from https://github.com/soumith/ganhacks
+An InfoGAN with both categorical and continuous structured latent codes.
+Added tips from https://github.com/soumith/ganhacks.
 """
 
 import torch.nn as nn
@@ -283,7 +284,7 @@ class InfoGAN(nn.Module):
 
         # Loss for fake images
         z_noise, dis_noise, con_noise = self.noise(batch_size)
-        fake_x = self.generator(z_noise, dis_noise, con_noise).detach()
+        fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
         fake_pred = self.discriminator(fake_x)
         d_fake_loss = self.gan_loss(fake_pred, fake_labels)
 
@@ -306,7 +307,7 @@ class InfoGAN(nn.Module):
                 batch_size, batch_dis_classes=sampled_labels)
 
         # Push it through QNet
-        gen_x = self.generator(z_noise, dis_noise, con_noise)
+        gen_x = self.generator((z_noise, dis_noise, con_noise))
         _, gen_features = self.discriminator(gen_x) 
         pred_dis_code, pred_con_mean, pred_con_logvar = self.QNet(gen_features)
 
@@ -398,7 +399,7 @@ class InfoGAN(nn.Module):
         
                 # Loss for fake images
                 z_noise, dis_noise, con_noise = self.noise(batch_size)
-                fake_x = self.generator(z_noise, dis_noise, con_noise).detach()
+                fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
                 fake_pred, _ = self.discriminator(fake_x)
                 d_fake_loss = self.gan_loss(fake_pred, fake_labels)
         
@@ -429,7 +430,7 @@ class InfoGAN(nn.Module):
                         batch_size, batch_cat_c_dim=sampled_labels)
         
                 # Push it through QNet
-                gen_x = self.generator(z_noise, dis_noise, con_noise)
+                gen_x = self.generator((z_noise, dis_noise, con_noise))
                 _, gen_features = self.discriminator(gen_x) 
                 pred_dis_code, pred_con_mean, pred_con_logvar = self.Qnet(gen_features)
         

@@ -9,7 +9,7 @@ Created on Sun Dec  1 13:59:33 2019
 config = {
         'generator_config': {
                 'class_name': 'FullyConnectedGenerator',
-                'layer_dims': [9, 128, 256, 256, 512]
+                'layer_dims': [128, 256, 256, 512]
                 },
         
         'discriminator_config': {
@@ -25,8 +25,9 @@ config = {
         'data_config': {
                 'input_size': 553,
                 'usual_noise_dim': 1,
-                'structured_cat_dim': 0, 
+                'structured_cat_dim': 2, 
                 'structured_con_dim': 6,
+                'total_noise': 9
                 },
                 
         'optim_config': {
