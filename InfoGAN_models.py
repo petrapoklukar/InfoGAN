@@ -10,6 +10,7 @@ Base implementation thanks to https://github.com/eriklindernoren/PyTorch-GAN/blo
 
 import torch.nn as nn
 import torch
+import math
 
 # --------------------------------------------------------------- #
 # --- To keep track of the dimensions of convolutional layers --- #
@@ -23,14 +24,34 @@ class TempPrintShape(nn.Module):
         print(self.message, feat.shape)
         return feat 
     
+    
+class LinToConv(nn.Module):
+    def __init__(self, input_dim, n_channels):
+        super(LinToConv, self).__init__()
+        self.n_channels = n_channels
+        self.width = int(np.sqrt((input_dim / n_channels)))
+
+    def forward(self, feat):
+        feat = feat.view((feat.shape[0], self.n_channels, self.width, self.width))
+        return feat
+
+
+class ConvToLin(nn.Module):
+    def __init__(self): 
+        super(ConvToLin, self).__init__()
+
+    def forward(self, feat):
+        batch, channels, width, height = feat.shape
+        feat = feat.view((batch, channels * width * height)) 
+        return feat
 
 # ------------ #
 # --- QNet --- #
 # ------------ #
 class QNet(nn.Module):
-    def __init__(self, config, data_config):
+    def __init__(self, model_config, data_config):
         super(QNet, self).__init__()
-        self.last_layer_dim = config['last_layer_dim']
+        self.last_layer_dim = model_config['last_layer_dim']
         self.n_categorical_codes = data_config['structured_cat_dim']
         self.n_continuous_codes = data_config['structured_con_dim']
         self.forward_pass = self.continous_forward
@@ -42,16 +63,19 @@ class QNet(nn.Module):
         if self.n_categorical_codes > 0:
             # Structured categorical code
             self.forward_pass = self.full_forward
+            print('forward_pass set to full.')
             self.cat_layer = nn.Sequential(
                     nn.Linear(self.last_layer_dim, self.n_categorical_codes), 
                     nn.Softmax(dim=-1))
     
     def continous_forward(self, x):
+        """Forward pass without structured categorical code"""
         con_code_mean = self.con_layer_mean(x) # Structured continuous code
         con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
         return con_code_mean, con_code_logvar
     
     def full_forward(self, x):
+        """Forward pass with structured categorical and continuous codes"""
         cat_code = self.cat_layer(x) # Structured categorical code
         con_code_mean = self.con_layer_mean(x) # Structured continuous code
         con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
@@ -118,74 +142,82 @@ class FullyConnectedDiscriminator(nn.Module):
         return validity, out
     
     
-# ------------------------------------------------------------------- #
-# --- Under construction: Convolutional Generator & Distriminator --- #
-# ------------------------------------------------------------------- #
+# ----------------------------------------------- #
+# --- Convolutional Generator & Distriminator --- #
+# ----------------------------------------------- #
 class ConvolutionalGenerator(nn.Module):
-    def __init__(self, config):
+    def __init__(self, gen_config, data_config):
         super(ConvolutionalGenerator, self).__init__()
-        self.input_size = config['input_size']
-        self.output_size = config['output_size']
-        self.init_size = config['init_size'] # 8
-        linlayer_dims = [self.input_size, 1024, self.init_size*self.init_size*128]
-        self.convlayer_dims = [128, 64, 1]
+        self.gen_config = gen_config
+        self.n_categorical_codes = data_config['structured_cat_dim']
+
+        self.layer_dims = gen_config['layer_dims']
+        self.layer_dims.insert(0, data_config['total_noise'])
+        
+        self.channel_dims = gen_config['channel_dims']
+        self.init_size = gen_config['init_size'] 
+        assert(int(math.sqrt(self.layer_dims[-1]/self.channel_dims[0])) == self.init_size)
         
         self.lin = nn.Sequential()
-        for i in range(len(linlayer_dims) - 1):
-            self.lin.add_module('lin' + str(i), nn.Linear(linlayer_dims[i], linlayer_dims[i+1]))
-            self.lin.add_module('lin_relu' + str(i), nn.LeakyReLU(0.1))
-            self.lin.add_module('lin_bn' + str(i), nn.BatchNorm1d(linlayer_dims[i+1]))
-        
+        for i in range(len(self.layer_dims) - 1):
+            self.lin.add_module('lin' + str(i), nn.Linear(self.layer_dims[i], self.layer_dims[i+1]))
+            self.lin.add_module('lin_relu' + str(i), nn.ReLU())
+            self.lin.add_module('lin_bn' + str(i), nn.BatchNorm1d(self.layer_dims[i+1]))
+        self.lin.add_module('conv_to_lin', LinToConv(self.layer_dims[-1], self.channel_dims[0]))
+    
+        # Another version would be replacing ConvTranspose2d with Conv2d with 
+        # the same parameters and have an Upsample(factor=4) in front of each
         self.conv = nn.Sequential()
-        for i in range(1, len(self.convlayer_dims)):
-            self.conv.add_module('conv_upsample' + str(i), nn.Upsample(scale_factor=4))
-            self.conv.add_module('conv2d' + str(i), nn.Conv2d(
-                    self.convlayer_dims[i-1], self.convlayer_dims[i], 4, stride=2))
-            self.conv.add_module('conv_relu' + str(i), nn.LeakyReLU(0.1))
-            self.conv.add_module('conv_bn' + str(i), nn.BatchNorm2d(self.convlayer_dims[i]))
+        for i in range(1, len(self.channel_dims) - 1):
+            self.conv.add_module('conv2d' + str(i), nn.ConvTranspose2d(
+                    self.channel_dims[i-1], self.channel_dims[i], 4, stride=2))
+            self.conv.add_module('conv_relu' + str(i), nn.ReLU())
+            self.conv.add_module('conv_bn' + str(i), nn.BatchNorm2d(self.channel_dims[i]))
+        self.conv.add_module('conv2d_last' + str(i), nn.ConvTranspose2d(
+                    self.channel_dims[-2], self.channel_dims[-1], 4, stride=2, padding=3))
 
-
-    def forward(self, noise, labels, code):
-        gen_input = torch.cat((noise, labels, code), -1)
+    def forward(self, *args):
+        gen_input = torch.cat((*args), -1)
         out = self.lin(gen_input)
-        out = out.view(out.shape[0], self.convlayer_dims[0], self.init_size, self.init_size)
         img = self.conv(out)
         return img
 
 
 class ConvolutionalDiscriminator(nn.Module):
-    def __init__(self, config):
+    def __init__(self, dis_config, data_config):
         super(ConvolutionalDiscriminator, self).__init__()
-        self.input_size = config['input_size']
-        self.output_size = config['output_size']
-        self.convlayer_dims = [self.input_size, 128, 64]
+        self.dis_config = dis_config
+
+        self.channel_dims = dis_config['channel_dims']
+        self.layer_dims = dis_config['layer_dims']
 
         self.conv = nn.Sequential()
-        for i in range(len(self.convlayer_dims) - 1):
+        for i in range(len(self.channel_dims) - 1):
             self.conv.add_module('conv2d' + str(i), nn.Conv2d(
-                    self.convlayer_dims[i], self.convlayer_dims[i+1], 4, stride=2))
+                    self.channel_dims[i], self.channel_dims[i+1], 4, stride=2))
             self.conv.add_module('lrelu' + str(i), nn.LeakyReLU(0.1, inplace=True))
             if i > 0:
-                self.conv.add_module('bn', nn.BatchNorm2d(self.convlayer_dims[i+1]))
-
-        # The height and width of downsampled image
-        ds_size = 5
-
-        # Output layers
+                self.conv.add_module('bn' + str(i), nn.BatchNorm2d(self.channel_dims[i+1]))
+        
+        self.lin = nn.Sequential()
+        self.lin.add_module('conv_to_lin', ConvToLin())
+        for i in range(len(self.layer_dims) - 1):
+            self.lin.add_module('lin' + str(i), nn.Linear(
+                    self.layer_dims[i], self.layer_dims[i+1]))
+            self.lin.add_module('lrelu' + str(i), nn.LeakyReLU(0.1, inplace=True))
+            self.lin.add_module('bn' + str(i), nn.BatchNorm1d(self.layer_dims[i+1]))
+        
+        # Output layers for discriminator
         self.d_out = nn.Sequential(
-                nn.Linear(self.convlayer_dims[-1] * ds_size ** 2, 1),
+                nn.Linear(self.layer_dims[-1], 1),
                 nn.Sigmoid())
-#        self.categorical_layer = nn.Sequential(nn.Linear(convlayer_dims[-1] * ds_size ** 2, config['n_categorical_codes']), 
-#                                               nn.Softmax(dim=-1))
-#        self.continuous_layer = nn.Sequential(nn.Linear(convlayer_dims[-1] * ds_size ** 2, config['n_continuous_codes']))
-
+        
     def forward(self, x):
-        out = self.conv(x)
-        out = out.view(out.shape[0], -1)
-        validity = self.d_out(out)
-#        categorical_code = self.categorical_layer(out)
-#        continous_code = self.continuous_layer(out)
-        return validity, out # categorical_code, continous_code
+        out_conv = self.conv(x) 
+        out_lin = self.lin(out_conv) # Needed for QNet
+        validity = self.d_out(out_lin) # Usual discriminator output
+        return validity, out_lin 
+
     
 # --------------------------------- #
 # --- Testing the architectures --- #
@@ -289,6 +321,46 @@ if __name__ == '__main__':
     Qnet_config = {
             'class_name': 'QNet',
             'last_layer_dim': 50,
+            }
+    qnet = QNet(Qnet_config, data_config)
+    q_out = qnet(d_out[1])
+    print(' *- q_out.shape ', list(map(lambda x: x.shape, q_out)))
+
+
+    # Test the Convolutional Models
+    print('\n\nTesting Convolutional layers...\n')
+    data_config = {
+        'input_size': 553,
+        'usual_noise_dim': 62,
+        'structured_cat_dim': 10, 
+        'structured_con_dim': 2,
+        'total_noise': 74
+        }
+    noise = full_noise(64, data_config)
+    print(' *- noise.shape ', list(map(lambda x: x.shape, noise)))
+    generator_config = {
+        'class_name': 'ConvolutionalGenerator',
+        'layer_dims': [1024, 7*7*128],
+        'channel_dims': [128, 64, 1],
+        'init_size': 7
+    }
+    generator = ConvolutionalGenerator(generator_config, data_config)
+    g_out = generator(noise)
+    print(' *- g_out.shape ', g_out.shape)
+    
+    discriminator_config =  {
+            'class_name': 'ConvolutionalDiscriminator',
+            'channel_dims': [1, 64, 128],
+            'layer_dims': [128*5*5, 1024, 128]
+            }
+    
+    discriminator = ConvolutionalDiscriminator(discriminator_config, data_config)
+    d_out = discriminator(g_out)
+    print(' *- d_out.shape ({0}, {1})'.format(d_out[0].shape, d_out[1].shape))  
+    
+    Qnet_config = {
+            'class_name': 'QNet',
+            'last_layer_dim': 128,
             }
     qnet = QNet(Qnet_config, data_config)
     q_out = qnet(d_out[1])
