@@ -46,7 +46,7 @@ config = {
                 
         'train_config': {
                 'batch_size': 64,
-                'epochs': 100,
+                'epochs': 10,
                 'snapshot': 2, 
                 'console_print': 1,
                 'gen_lr_schedule': [(0, 1e-3)],

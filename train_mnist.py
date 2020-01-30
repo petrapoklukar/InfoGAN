@@ -84,7 +84,7 @@ if __name__ == '__main__':
     path_to_data = config_file['data_config']['path_to_data']
     dataset = ImageDataset('MNIST', path_to_data)
     # Laptop TESTING
-#    dataset =  torch.utils.data.Subset(dataset, np.arange(100))
+    dataset =  torch.utils.data.Subset(dataset, np.arange(100))
     dloader = DataLoader(dataset, batch_size=config_file['train_config']['batch_size'],
                          shuffle=True, num_workers=0)
     dloader_iter = iter(dloader)
