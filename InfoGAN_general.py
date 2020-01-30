@@ -44,7 +44,6 @@ class InfoGAN(nn.Module):
         self.dis_lr_schedule = train_config['dis_lr_schedule']
         self.init_dis_lr_schedule = train_config['dis_lr_schedule']
 
-
         self.lambda_cat = train_config['lambda_cat']
         self.lambda_con = train_config['lambda_con']
         
@@ -335,7 +334,7 @@ class InfoGAN(nn.Module):
             batch_cat_c_dim = np.random.randint(0, self.cat_c_dim, batch_size)
         dis_noise = np.zeros((batch_size, self.cat_c_dim)) 
         dis_noise[range(batch_size), batch_cat_c_dim] = 1.0 # bs, dis_classes
-        dis_noise = torch.Tensor(dis_noise, device=self.device) 
+        dis_noise = torch.Tensor(dis_noise).to(self.device) 
         
         # structured continuous code noise
         con_noise = torch.empty((batch_size, self.con_c_dim), requires_grad=False, 
