@@ -58,6 +58,7 @@ class InfoGAN(nn.Module):
     def init_generator(self):
         """Initialises the generator."""
         try:
+            print(self.config['generator_config'])
             class_ = getattr(InfoGAN_models, self.config['generator_config']['class_name'])
             self.generator = class_(self.config['generator_config'], self.data_config).to(self.device)
             print(' *- Initialised generator: ', self.config['generator_config']['class_name'])
@@ -337,6 +338,15 @@ class InfoGAN(nn.Module):
         con_noise = torch.empty((batch_size, self.con_c_dim), requires_grad=False, 
                                device=self.device).uniform_(-1, 1)
         return z_noise, dis_noise, con_noise
+
+    def sample_fixed_noise(self, n_samples, noise_dim, ntype):
+        """Samples one type of noise only"""
+        if ntype == 'uniform':
+            return torch.empty((n_samples, noise_dim), device=self.device).uniform_(-1, 1)
+        elif ntype == 'normal':
+            return torch.empty((n_samples, noise_dim), device=self.device).normal_()
+        else:
+            raise ValueError('Noise type {0} not recognised.'.format(ntype))
     
     def train_infogan(self, train_dataloader, chpnt_path=''):
         """Trains an InfoGAN."""
@@ -383,7 +393,7 @@ class InfoGAN(nn.Module):
                 
                 # Ground truths
                 batch_size = x.shape[0]
-                x = x.view(batch_size, -1) # DEBUG 553 on yumidata
+#                x = x.view(batch_size, -1) # DEBUG 553 on yumidata
                 real_x = x.to(self.device)        
                 real_labels = torch.ones(batch_size, 1, device=self.device)
                 fake_labels = torch.zeros(batch_size, 1, device=self.device)
@@ -466,9 +476,9 @@ class InfoGAN(nn.Module):
                 self.plot_snapshot_loss()
                 
         
-        # ------------------------ #
+        # ---------------------- #
         # --- Save the model --- #
-        # ------------------------ # 
+        # ---------------------- # 
         print('Training completed.')
         self.plot_model_loss()
         self.eval()

@@ -11,6 +11,7 @@ Base implementation thanks to https://github.com/eriklindernoren/PyTorch-GAN/blo
 import torch.nn as nn
 import torch
 import math
+import numpy as np
 
 # --------------------------------------------------------------- #
 # --- To keep track of the dimensions of convolutional layers --- #
@@ -29,7 +30,7 @@ class LinToConv(nn.Module):
     def __init__(self, input_dim, n_channels):
         super(LinToConv, self).__init__()
         self.n_channels = n_channels
-        self.width = int(np.sqrt((input_dim / n_channels)))
+        self.width = int(np.sqrt(input_dim / n_channels))
 
     def forward(self, feat):
         feat = feat.view((feat.shape[0], self.n_channels, self.width, self.width))
@@ -157,13 +158,13 @@ class ConvolutionalGenerator(nn.Module):
         self.channel_dims = gen_config['channel_dims']
         self.init_size = gen_config['init_size'] 
         assert(int(math.sqrt(self.layer_dims[-1]/self.channel_dims[0])) == self.init_size)
-        
+
         self.lin = nn.Sequential()
         for i in range(len(self.layer_dims) - 1):
             self.lin.add_module('lin' + str(i), nn.Linear(self.layer_dims[i], self.layer_dims[i+1]))
             self.lin.add_module('lin_relu' + str(i), nn.ReLU())
             self.lin.add_module('lin_bn' + str(i), nn.BatchNorm1d(self.layer_dims[i+1]))
-        self.lin.add_module('conv_to_lin', LinToConv(self.layer_dims[-1], self.channel_dims[0]))
+        self.lin.add_module('lin_to_conv', LinToConv(self.layer_dims[-1], self.channel_dims[0]))
     
         # Another version would be replacing ConvTranspose2d with Conv2d with 
         # the same parameters and have an Upsample(factor=4) in front of each
@@ -330,7 +331,7 @@ if __name__ == '__main__':
     # Test the Convolutional Models
     print('\n\nTesting Convolutional layers...\n')
     data_config = {
-        'input_size': 553,
+        'input_size': None,
         'usual_noise_dim': 62,
         'structured_cat_dim': 10, 
         'structured_con_dim': 2,

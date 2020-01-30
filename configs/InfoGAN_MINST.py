@@ -9,9 +9,9 @@ Created on Mon Jan 27 12:18:48 2020
 config = {
         'generator_config': {
                 'class_name': 'ConvolutionalGenerator',
-                'linlayer_dims': [74, 1024, 7*7*128], 
-                'init_size': 7, # the width for the first convolution
+                'layer_dims': [1024, 7*7*128],
                 'channel_dims': [128, 64, 1],
+                'init_size': 7
                 },
         
         'discriminator_config': {
@@ -26,11 +26,12 @@ config = {
                 },
         
         'data_config': {
-                'input_size': 553,
+                'input_size': None,
                 'usual_noise_dim': 62,
                 'structured_cat_dim': 10, 
                 'structured_con_dim': 2,
-                'total_noise': 74
+                'total_noise': 74,
+                'path_to_data': '../datasets/MNIST'
                 },
                 
         'optim_config': {
