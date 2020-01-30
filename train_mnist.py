@@ -14,7 +14,7 @@ import InfoGAN_models
 import InfoGAN_general as model
 
 import matplotlib
-matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
+matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 import numpy as np
 from importlib.machinery import SourceFileLoader
@@ -103,6 +103,11 @@ if __name__ == '__main__':
         eval_config = config_file['eval_config']
         if not args.train:
             model.load_model(eval_config)
+        if device.type == 'cpu': 
+            # Reimport interactive backend
+            import matplotlib
+            matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
+            import matplotlib.pyplot as plt
         
         # Fix usual noise and the categorical noise, sample structured continous noise
         n_samples = eval_config['n_test_samples']
