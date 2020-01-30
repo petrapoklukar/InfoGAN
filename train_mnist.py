@@ -26,7 +26,7 @@ parser.add_argument('--config_name', default=None, type=str, help='the path to s
 parser.add_argument('--train', default=0, type=int, help='set it to train the model')
 parser.add_argument('--chpnt_path', default='', type=str, help='set it to train the model')
 parser.add_argument('--eval', default=0, type=int, help='evaluates the trained model')
-#parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
+parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
 
 
 class ImageDataset(Dataset):
