@@ -335,7 +335,7 @@ class InfoGAN(nn.Module):
             batch_cat_c_dim = np.random.randint(0, self.cat_c_dim, batch_size)
         dis_noise = np.zeros((batch_size, self.cat_c_dim)) 
         dis_noise[range(batch_size), batch_cat_c_dim] = 1.0 # bs, dis_classes
-        dis_noise = torch.Tensor(dis_noise)
+        dis_noise = torch.Tensor(dis_noise, device=self.device) 
         
         # structured continuous code noise
         con_noise = torch.empty((batch_size, self.con_c_dim), requires_grad=False, 
