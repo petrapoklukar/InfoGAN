@@ -303,7 +303,7 @@ class InfoGAN(nn.Module):
         # - INFORMATION LOSS
         # Sampled ground truth labels, see eq 5 in the paper
         sampled_labels = np.random.randint(0, self.n_classes, batch_size)
-        gt_labels = torch.LongTensor(sampled_labels, device=model.device)
+        gt_labels = torch.LongTensor(sampled_labels).to(self.device)
 
         # Sample noise, labels and code as generator input
         z_noise, dis_noise, con_noise = self.noise(
@@ -448,7 +448,7 @@ class InfoGAN(nn.Module):
                 # - INFORMATION LOSS
                 # Sampled ground truth labels, see eq 5 in the paper
                 sampled_labels = np.random.randint(0, self.cat_c_dim, batch_size)
-                gt_labels = torch.LongTensor(sampled_labels, device=self.device)
+                gt_labels = torch.LongTensor(sampled_labels).to(self.device)
         
                 # Sample noise, labels and code as generator input
                 z_noise, dis_noise, con_noise = self.noise(
