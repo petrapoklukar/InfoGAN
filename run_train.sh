@@ -27,6 +27,7 @@ nvidia-smi
 python train_mnist.py \
         --config_name='InfoGAN_MINST' \
         --train=1 \
+        --eval=1 \
         --device='cuda' \
 
 HERE

@@ -58,7 +58,6 @@ if __name__ == '__main__':
 #    args.device = None
 #    args.eval = None
     
-    
     # Load config
     config_file = os.path.join('.', 'configs', args.config_name + '.py')
     export_directory = os.path.join('.', 'models', args.config_name)
@@ -84,7 +83,7 @@ if __name__ == '__main__':
     path_to_data = config_file['data_config']['path_to_data']
     dataset = ImageDataset('MNIST', path_to_data)
     # Laptop TESTING
-    dataset =  torch.utils.data.Subset(dataset, np.arange(100))
+#    dataset =  torch.utils.data.Subset(dataset, np.arange(100))
     dloader = DataLoader(dataset, batch_size=config_file['train_config']['batch_size'],
                          shuffle=True, num_workers=0)
     dloader_iter = iter(dloader)
@@ -126,8 +125,8 @@ if __name__ == '__main__':
         for i in range(n_samples):
             plt.subplot(n_samples, 1, i+1)
             plt.imshow(gen_con_samples[i])
-        plt.show()
         plt.savefig(eval_config['savefig_path'] + 'sampledStructuredContNoise')
+        plt.close()
         
         # Fix usual noise and the continous noise, sample structured categorical noise
         fix_cont_noise = torch.empty((1, model.con_c_dim), device=model.device).normal_()
@@ -142,6 +141,5 @@ if __name__ == '__main__':
         for i in range(n_samples):
             plt.subplot(n_samples, 1, i+1)
             plt.imshow(gen_con_samples[i])
-        plt.show()
         plt.savefig(eval_config['savefig_path'] + 'sampledStructuredCatNoise')
-    
+        plt.close()
