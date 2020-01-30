@@ -4,8 +4,8 @@ SOURCE_PATH="${HOME}/Workspace/InfoGAN"
 RUNS_PATH="${SOURCE_PATH}/slurm_logs"
 
 # Test the job before actually submitting
-SBATCH_OR_CAT=cat
-# SBATCH_OR_CAT=sbatch
+# SBATCH_OR_CAT=cat
+SBATCH_OR_CAT=sbatch
 
 "${SBATCH_OR_CAT}" << HERE
 #!/usr/bin/env bash
@@ -25,7 +25,7 @@ conda activate base
 nvidia-smi
 
 python train_mnist.py \
-        --config_name ='InfoGAN_MINST' \
+        --config_name='InfoGAN_MINST' \
         --train=1 \
         --device='cuda' \
 

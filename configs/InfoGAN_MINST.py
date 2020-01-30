@@ -46,12 +46,13 @@ config = {
                 
         'train_config': {
                 'batch_size': 64,
-                'epochs': 5,
+                'epochs': 100,
                 'snapshot': 2, 
                 'console_print': 1,
-                'lr_schedule': [(0, 1e-3), (100, 1e-4)],
-                'lambda_cat': 0,
-                'lambda_con': 0.1, 
+                'gen_lr_schedule': [(0, 1e-3)],
+                'dis_lr_schedule': [(0, 2e-4)],
+                'lambda_cat': 1.,
+                'lambda_con': 0.5, 
                 'filename': 'infogan',
                 'random_seed': 1201
                 },

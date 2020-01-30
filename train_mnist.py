@@ -23,8 +23,9 @@ import argparse
 
 parser = argparse.ArgumentParser(description='VAE training for robot motion trajectories')
 parser.add_argument('--config_name', default=None, type=str, help='the path to save/load the model')
-parser.add_argument('--train', default=0, action='store_true', help='set it to train the model')
-parser.add_argument('--eval', default=0, help='evaluates the trained model')
+parser.add_argument('--train', default=0, type=int, help='set it to train the model')
+parser.add_argument('--chpnt_path', default='', type=str, help='set it to train the model')
+parser.add_argument('--eval', default=0, type=int, help='evaluates the trained model')
 parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
 
 
@@ -50,11 +51,13 @@ class ImageDataset(Dataset):
 if __name__ == '__main__':
     args = parser.parse_args()
     
-    # TESTING
+    # Laptop TESTING
 #    args.config_name = 'InfoGAN_MINST'
 #    args.train = 1
+#    args.chpnt_path = 'models/InfoGAN_MINST/infogan_checkpoint9.pth'
 #    args.device = None
 #    args.eval = None
+    
     
     # Load config
     config_file = os.path.join('.', 'configs', args.config_name + '.py')
@@ -80,7 +83,8 @@ if __name__ == '__main__':
     # Load the data 
     path_to_data = config_file['data_config']['path_to_data']
     dataset = ImageDataset('MNIST', path_to_data)
-    dataset =  torch.utils.data.Subset(dataset, np.arange(100))
+    # Laptop TESTING
+#    dataset =  torch.utils.data.Subset(dataset, np.arange(100))
     dloader = DataLoader(dataset, batch_size=config_file['train_config']['batch_size'],
                          shuffle=True, num_workers=0)
     dloader_iter = iter(dloader)
@@ -92,7 +96,7 @@ if __name__ == '__main__':
     
     # Train the model
     if args.train:
-        model.train_infogan(dloader)
+        model.train_infogan(dloader, chpnt_path=args.chpnt_path)
 
     # Evaluate the model
     if args.eval:

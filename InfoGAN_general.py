@@ -39,8 +39,11 @@ class InfoGAN(nn.Module):
         self.snapshot = train_config['snapshot']
         self.console_print = train_config['console_print']
         
-        self.lr_schedule = train_config['lr_schedule']
-        self.init_lr_schedule = train_config['lr_schedule']
+        self.gen_lr_schedule = train_config['gen_lr_schedule']
+        self.init_gen_lr_schedule = train_config['gen_lr_schedule']
+        self.dis_lr_schedule = train_config['dis_lr_schedule']
+        self.init_dis_lr_schedule = train_config['dis_lr_schedule']
+
 
         self.lambda_cat = train_config['lambda_cat']
         self.lambda_con = train_config['lambda_con']
@@ -367,19 +370,32 @@ class InfoGAN(nn.Module):
             self.init_generator()
             self.init_Qnet()
             self.init_weights()
-            self.start_epoch, self.lr = self.lr_schedule.pop(0)
+            # TODO test start_epoch
+            self.start_gen_epoch, self.gen_lr = self.gen_lr_schedule.pop(0)
+            self.start_dis_epoch, self.dis_lr = self.dis_lr_schedule.pop(0)
+            assert(self.start_gen_epoch == self.start_dis_epoch)
+            self.start_epoch = self.start_dis_epoch
             try:
-                self.lr_update_epoch, self.new_lr = self.lr_schedule.pop(0)
+                self.gen_lr_update_epoch, self.new_gen_lr = self.gen_lr_schedule.pop(0)
+                self.dis_lr_update_epoch, self.new_dis_lr = self.dis_lr_schedule.pop(0)
             except:
-                self.lr_update_epoch, self.new_lr = self.start_epoch - 1, self.lr
+                self.gen_lr_update_epoch, self.new_gen_lr = self.start_epoch - 1, self.gen_lr
+                self.dis_lr_update_epoch, self.new_dis_lr = self.start_epoch - 1, self.dis_lr
 
             self.init_optimisers()
             self.epoch_losses = []
-            print((' *- Learning rate: {0}\n' + 
-                   ' *- Next lr update at {1} to the value {2}\n' + 
-                   ' *- Remaining lr schedule: {3}'
-                   ).format(self.lr, self.lr_update_epoch, self.new_lr, 
-                   self.lr_schedule))            
+            print((' *- Generator' + 
+                   '    *- Learning rate: {0}\n' + 
+                   '    *- Next lr update at {1} to the value {2}\n' + 
+                   '    *- Remaining lr schedule: {3}'
+                   ).format(self.gen_lr, self.gen_lr_update_epoch, self.new_gen_lr, 
+                   self.gen_lr_schedule))            
+            print((' *- Discriminator' + 
+                   '    *- Learning rate: {0}\n' + 
+                   '    *- Next lr update at {1} to the value {2}\n' + 
+                   '    *- Remaining lr schedule: {3}'
+                   ).format(self.dis_lr, self.dis_lr_update_epoch, self.new_dis_lr, 
+                   self.dis_lr_schedule))            
 
         self.print_model_params()
         self.init_losses()
@@ -502,7 +518,8 @@ class InfoGAN(nn.Module):
             f.write( str(self.config) )
             f.writelines(['\n\n', 
                     '*- Model path: {0}\n'.format(self.model_path),
-                    '*- Learning rate schedule: {0}\n'.format(self.init_lr_schedule),
+                    '*- Generator learning rate schedule: {0}\n'.format(self.init_gen_lr_schedule),
+                    '*- Discriminator learning rate schedule: {0}\n'.format(self.init_dis_lr_schedule),
                     '*- Training epoch losses: (model_loss, recon_loss, kl_loss)\n'
                     ])
             f.writelines(list(map(
@@ -538,10 +555,16 @@ class InfoGAN(nn.Module):
 
                 'snapshot': self.snapshot,
                 'console_print': self.console_print,
-                'current_lr': self.lr,
-                'lr_update_epoch': self.lr_update_epoch, 
-                'new_lr': self.new_lr, 
-                'lr_schedule': self.lr_schedule
+                
+                'current_gen_lr': self.gen_lr,
+                'gen_lr_update_epoch': self.gen_lr_update_epoch, 
+                'new_gen_lr': self.new_gen_lr, 
+                'gen_lr_schedule': self.gen_lr_schedule,
+                
+                'current_dis_lr': self.dis_lr,
+                'dis_lr_update_epoch': self.dis_lr_update_epoch, 
+                'new_dis_lr': self.new_dis_lr, 
+                'dis_lr_schedule': self.dis_lr_schedule
                 }
         torch.save({**training_dict, **self.config}, path)
         print(' *- Saved {1} checkpoint {0}.'.format(self.current_epoch, checkpoint_type))
@@ -561,10 +584,15 @@ class InfoGAN(nn.Module):
         self.generator.load_state_dict(checkpoint['generator_state_dict'])
         self.Qnet.load_state_dict(checkpoint['Qnet_state_dict'])
         
-        self.lr = checkpoint['current_lr']
-        self.lr_update_epoch = checkpoint['lr_update_epoch']
-        self.new_lr = checkpoint['new_lr']
-        self.lr_schedule = checkpoint['lr_schedule']
+        self.gen_lr = checkpoint['current_gen_lr']
+        self.gen_lr_update_epoch = checkpoint['gen_lr_update_epoch']
+        self.new_gen_lr = checkpoint['new_gen_lr']
+        self.gen_lr_schedule = checkpoint['gen_lr_schedule']
+        
+        self.dis_lr = checkpoint['current_dis_lr']
+        self.dis_lr_update_epoch = checkpoint['dis_lr_update_epoch']
+        self.new_dis_lr = checkpoint['new_dis_lr']
+        self.dis_lr_schedule = checkpoint['dis_lr_schedule']
         
         self.init_optimisers()
         self.optimiser_D.load_state_dict(checkpoint['optimiser_D_state_dict'])
@@ -579,10 +607,15 @@ class InfoGAN(nn.Module):
                ' *- Last epoch {0} with loss {1}.\n' 
                ).format(checkpoint['last_epoch'], 
                checkpoint['last_epoch_loss']))
-        print(' *- Current lr {0}, next update on epoch {1} to the value {2}'.format(
-                self.lr, self.lr_update_epoch, self.new_lr)
+        print(' *- Generator:' +
+              ' *- Current lr {0}, next update on epoch {1} to the value {2}'.format(
+                      self.gen_lr, self.gen_lr_update_epoch, self.new_gen_lr)
               )
-        
+        print(' *- Discriminator:' +
+              ' *- Current lr {0}, next update on epoch {1} to the value {2}'.format(
+                self.dis_lr, self.dis_lr_update_epoch, self.new_dis_lr)
+              )
+
         self.train()
         assert(self.Qnet.training)
         
@@ -636,33 +669,38 @@ if __name__ == '__main__':
     
     config = {
             'generator_config': {
-                'class_name': 'FullyConnectedGenerator',
-                'layer_dims': [9, 128, 256, 256, 512]
+                'class_name': 'ConvolutionalGenerator',
+                'layer_dims': [1024, 7*7*128],
+                'channel_dims': [128, 64, 1],
+                'init_size': 7
                 },
-        
+            
             'discriminator_config': {
-                    'class_name': 'FullyConnectedDiscriminator',
-                    'layer_dims': [1000, 500, 250, 250, 50]
+                    'class_name': 'ConvolutionalDiscriminator',
+                    'channel_dims': [1, 64, 128],
+                    'layer_dims': [128*5*5, 1024, 128]
                     },
                     
             'Qnet_config': {
                     'class_name': 'QNet',
-                    'last_layer_dim': 50,
+                    'last_layer_dim': 128, # see layer_dims in discriminator
                     },
-                    
+            
             'data_config': {
-                    'input_size': 553,
-                    'usual_noise_dim': 1,
-                    'structured_cat_dim': 2, 
-                    'structured_con_dim': 6,
+                    'input_size': None,
+                    'usual_noise_dim': 62,
+                    'structured_cat_dim': 10, 
+                    'structured_con_dim': 2,
+                    'total_noise': 74,
+                    'path_to_data': '../datasets/MNIST'
                     },
-                    
+                        
             'optim_config': {
                     'optim_type': 'Adam',
                     'gen_lr': 1e-3,
                     'gen_b1': 0.9,
                     'gen_b2': 0.999,
-                    'dis_lr': 1e-3,
+                    'dis_lr': 2e-4,
                     'dis_b1': 0.9,
                     'dis_b2': 0.999
                     },    
@@ -672,7 +710,8 @@ if __name__ == '__main__':
                     'epochs': 5,
                     'snapshot': 2, 
                     'console_print': 1,
-                    'lr_schedule': [(0, 1e-3), (100, 1e-4)],
+                    'gen_lr_schedule': [(0, 1e-3)],
+                    'dis_lr_schedule': [(0, 2e-4)],
                     'lambda_cat': 1,
                     'lambda_con': 0.1, 
                     'filename': 'infogan',
