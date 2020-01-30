@@ -22,10 +22,11 @@ import os
 import argparse
 
 parser = argparse.ArgumentParser(description='VAE training for robot motion trajectories')
-#parser.add_argument('--train', default=False,action='store_true', help='set it to train the model')
-#parser.add_argument('--config_name', default=None, type=str, help='the path to save/load the model')
-#parser.add_argument('--path_to_data', default=None, type=str, help='the path to load the data')
-#parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
+parser.add_argument('--config_name', default=None, type=str, help='the path to save/load the model')
+parser.add_argument('--train', default=0, action='store_true', help='set it to train the model')
+parser.add_argument('--eval', default=0, help='evaluates the trained model')
+parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
+
 
 class ImageDataset(Dataset):
     def __init__(self, dataset_name, path_to_data, device=None):
@@ -50,10 +51,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # TESTING
-    args.config_name = 'InfoGAN_MINST'
-    args.device = None
-    args.train = 1
-    args.eval = None
+#    args.config_name = 'InfoGAN_MINST'
+#    args.train = 1
+#    args.device = None
+#    args.eval = None
     
     # Load config
     config_file = os.path.join('.', 'configs', args.config_name + '.py')
