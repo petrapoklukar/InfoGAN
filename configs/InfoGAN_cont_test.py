@@ -9,17 +9,17 @@ Created on Thu Dec  5 17:07:52 2019
 config = {
         'generator_config': {
                 'class_name': 'FullyConnectedGenerator',
-                'layer_dims': [128, 256, 256, 512]
+                'layer_dims': [128, 256, 512]
                 },
         
         'discriminator_config': {
                 'class_name': 'FullyConnectedDiscriminator',
-                'layer_dims': [1000, 500, 250, 250, 50]
+                'layer_dims': [512, 256, 128, 64]
                 },
                 
         'Qnet_config': {
                 'class_name': 'QNet',
-                'last_layer_dim': 50,
+                'last_layer_dim': 64,
                 },
                 
         'data_config': {
@@ -45,8 +45,9 @@ config = {
                 'epochs': 5,
                 'snapshot': 2, 
                 'console_print': 1,
-                'lr_schedule': [(0, 1e-3), (100, 1e-4)],
-                'lambda_cat': 0,
+                'gen_lr_schedule': [(0, 1e-3)],
+                'dis_lr_schedule': [(0, 2e-4)],
+                'lambda_cat': None,
                 'lambda_con': 0.1, 
                 'filename': 'infogan',
                 'random_seed': 1201
@@ -55,7 +56,9 @@ config = {
         'eval_config': {
                 'filepath': 'models/InfoGAN_cont_test/infogan_model.pt',
                 'load_checkpoint': False,
-                'n_test_samples': 4,
-                'savefig_path': 'models/InfoGAN_cont_test/'
+                'n_test_samples': 25,
+                'n_repeats': 5
+#                'n_test_samples': 4,
+#                'savefig_path': 'models/InfoGAN_cont_test/'
                 }
         }

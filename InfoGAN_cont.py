@@ -14,6 +14,7 @@ import torch.optim as optim
 import torch
 import InfoGAN_models
 import numpy as np
+import os
 import matplotlib
 matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
@@ -38,13 +39,17 @@ class InfoGAN(nn.Module):
         self.snapshot = train_config['snapshot']
         self.console_print = train_config['console_print']
         
-        self.lr_schedule = train_config['lr_schedule']
-        self.init_lr_schedule = train_config['lr_schedule']
+        self.gen_lr_schedule = train_config['gen_lr_schedule']
+        self.init_gen_lr_schedule = train_config['gen_lr_schedule']
+        self.dis_lr_schedule = train_config['dis_lr_schedule']
+        self.init_dis_lr_schedule = train_config['dis_lr_schedule']
 
         self.lambda_con = train_config['lambda_con']
         
+        self.exp_dir = train_config['exp_dir']
         self.save_path = train_config['exp_dir'] + '/' + train_config['filename']
         self.model_path = self.save_path + '_model.pt'
+        self.create_dirs()
         
         # Fix random seed
         torch.manual_seed(train_config['random_seed'])
@@ -53,6 +58,15 @@ class InfoGAN(nn.Module):
     # ---------------------- #
     # --- Init functions --- #
     # ---------------------- #
+    def create_dirs(self):
+        """Creates folders for saving training logs."""
+        self.test_dir = '{0}/Testing/'.format(self.exp_dir)
+        self.train_dir = '{0}/Training/'.format(self.exp_dir)
+        if (not os.path.isdir(self.test_dir)):
+            os.makedirs(self.test_dir)
+        if (not os.path.isdir(self.train_dir)):
+            os.makedirs(self.train_dir)
+            
     def init_generator(self):
         """Initialises the generator."""
         try:
@@ -127,7 +141,7 @@ class InfoGAN(nn.Module):
         """Initialises the losses"""
         # GAN Loss function
         self.gan_loss = torch.nn.BCELoss().to(self.device)
-        # Continuous latent codes are model with the gaussian function above
+        # Continuous latent codes are optimised with the gaussian loss below
     
     def gaussian_loss(self, x, mean, logvar):
         """Computes the exact Gaussian loss"""
@@ -184,7 +198,7 @@ class InfoGAN(nn.Module):
             plt.ylabel(plt_labels[i])
             plt.xlabel('# epochs')
             plt.legend()
-        plt.savefig(self.save_path + '_SnapshotLosses_{0}'.format(self.current_epoch))
+        plt.savefig(self.train_dir + 'SnapshotLosses_{0}'.format(self.current_epoch))
         plt.clf()
         plt.close()
     
@@ -220,6 +234,16 @@ class InfoGAN(nn.Module):
         ax2.set_xlim(0, self.epochs)
         ax2.set(xlabel='# epochs', ylabel='loss', title='Information loss')
         plt.savefig(self.save_path + '_ILoss')
+        plt.close()
+        
+        fig2, ax2 = plt.subplots()
+        ax.plot(plt_data[:, 0], 'go-', linewidth=2, label='D loss')
+        ax.plot(plt_data[:, 1], 'bo-', linewidth=2, label='G loss')
+        ax2.plot(plt_data[:, 2], 'ro-', linewidth=2, label='I loss')
+        ax2.plot()
+        ax2.set_xlim(0, self.epochs)
+        ax2.set(xlabel='# epochs', ylabel='loss', title='All losses')
+        plt.savefig(self.save_path + '_Allosses')
         plt.close()
         
     def format_loss(self, losses_list):
@@ -347,19 +371,31 @@ class InfoGAN(nn.Module):
             self.init_generator()
             self.init_Qnet()
             self.init_weights()
-            self.start_epoch, self.lr = self.lr_schedule.pop(0)
+            self.start_gen_epoch, self.gen_lr = self.gen_lr_schedule.pop(0)
+            self.start_dis_epoch, self.dis_lr = self.dis_lr_schedule.pop(0)
+            assert(self.start_gen_epoch == self.start_dis_epoch)
+            self.start_epoch = self.start_dis_epoch
             try:
-                self.lr_update_epoch, self.new_lr = self.lr_schedule.pop(0)
+                self.gen_lr_update_epoch, self.new_gen_lr = self.gen_lr_schedule.pop(0)
+                self.dis_lr_update_epoch, self.new_dis_lr = self.dis_lr_schedule.pop(0)
             except:
-                self.lr_update_epoch, self.new_lr = self.start_epoch - 1, self.lr
-
+                self.gen_lr_update_epoch, self.new_gen_lr = self.start_epoch - 1, self.gen_lr
+                self.dis_lr_update_epoch, self.new_dis_lr = self.start_epoch - 1, self.dis_lr
+            
             self.init_optimisers()
             self.epoch_losses = []
-            print((' *- Learning rate: {0}\n' + 
-                   ' *- Next lr update at {1} to the value {2}\n' + 
-                   ' *- Remaining lr schedule: {3}'
-                   ).format(self.lr, self.lr_update_epoch, self.new_lr, 
-                   self.lr_schedule))            
+            print((' *- Generator' + 
+                   '    *- Learning rate: {0}\n' + 
+                   '    *- Next lr update at {1} to the value {2}\n' + 
+                   '    *- Remaining lr schedule: {3}'
+                   ).format(self.gen_lr, self.gen_lr_update_epoch, self.new_gen_lr, 
+                   self.gen_lr_schedule))            
+            print((' *- Discriminator' + 
+                   '    *- Learning rate: {0}\n' + 
+                   '    *- Next lr update at {1} to the value {2}\n' + 
+                   '    *- Remaining lr schedule: {3}'
+                   ).format(self.dis_lr, self.dis_lr_update_epoch, self.new_dis_lr, 
+                   self.dis_lr_schedule))   
 
         self.print_model_params()
         self.init_losses()
@@ -430,13 +466,13 @@ class InfoGAN(nn.Module):
             # ------------------------ #
             # --- Log the training --- #
             # ------------------------ #      
+            epoch_loss /= len(train_dataloader)
             print(
                 "[Epoch %d/%d] [D loss: %f] [G loss: %f] [info loss: %f]"
                 % (self.current_epoch, self.epochs, epoch_loss[0], 
                    epoch_loss[1], epoch_loss[2]))
                     
             # TODO: add logger here
-            epoch_loss /= len(train_dataloader)
             self.epoch_losses.append(epoch_loss)
             self.plot_model_loss()       
             self.save_checkpoint(epoch_loss)
@@ -477,7 +513,8 @@ class InfoGAN(nn.Module):
             f.write( str(self.config) )
             f.writelines(['\n\n', 
                     '*- Model path: {0}\n'.format(self.model_path),
-                    '*- Learning rate schedule: {0}\n'.format(self.init_lr_schedule),
+                    '*- Generator learning rate schedule: {0}\n'.format(self.init_gen_lr_schedule),
+                    '*- Discriminator learning rate schedule: {0}\n'.format(self.init_dis_lr_schedule),
                     '*- Training epoch losses: (model_loss, recon_loss, kl_loss)\n'
                     ])
             f.writelines(list(map(
@@ -512,10 +549,16 @@ class InfoGAN(nn.Module):
 
                 'snapshot': self.snapshot,
                 'console_print': self.console_print,
-                'current_lr': self.lr,
-                'lr_update_epoch': self.lr_update_epoch, 
-                'new_lr': self.new_lr, 
-                'lr_schedule': self.lr_schedule
+                
+                'current_gen_lr': self.gen_lr,
+                'gen_lr_update_epoch': self.gen_lr_update_epoch, 
+                'new_gen_lr': self.new_gen_lr, 
+                'gen_lr_schedule': self.gen_lr_schedule,
+                
+                'current_dis_lr': self.dis_lr,
+                'dis_lr_update_epoch': self.dis_lr_update_epoch, 
+                'new_dis_lr': self.new_dis_lr, 
+                'dis_lr_schedule': self.dis_lr_schedule
                 }
         torch.save({**training_dict, **self.config}, path)
         print(' *- Saved {1} checkpoint {0}.'.format(self.current_epoch, checkpoint_type))
@@ -535,10 +578,15 @@ class InfoGAN(nn.Module):
         self.generator.load_state_dict(checkpoint['generator_state_dict'])
         self.Qnet.load_state_dict(checkpoint['Qnet_state_dict'])
         
-        self.lr = checkpoint['current_lr']
-        self.lr_update_epoch = checkpoint['lr_update_epoch']
-        self.new_lr = checkpoint['new_lr']
-        self.lr_schedule = checkpoint['lr_schedule']
+        self.gen_lr = checkpoint['current_gen_lr']
+        self.gen_lr_update_epoch = checkpoint['gen_lr_update_epoch']
+        self.new_gen_lr = checkpoint['new_gen_lr']
+        self.gen_lr_schedule = checkpoint['gen_lr_schedule']
+        
+        self.dis_lr = checkpoint['current_dis_lr']
+        self.dis_lr_update_epoch = checkpoint['dis_lr_update_epoch']
+        self.new_dis_lr = checkpoint['new_dis_lr']
+        self.dis_lr_schedule = checkpoint['dis_lr_schedule']
         
         self.init_optimisers()
         self.optimiser_D.load_state_dict(checkpoint['optimiser_D_state_dict'])
@@ -553,8 +601,13 @@ class InfoGAN(nn.Module):
                ' *- Last epoch {0} with loss {1}.\n' 
                ).format(checkpoint['last_epoch'], 
                checkpoint['last_epoch_loss']))
-        print(' *- Current lr {0}, next update on epoch {1} to the value {2}'.format(
-                self.lr, self.lr_update_epoch, self.new_lr)
+        print(' *- Generator:' +
+              ' *- Current lr {0}, next update on epoch {1} to the value {2}'.format(
+                      self.gen_lr, self.gen_lr_update_epoch, self.new_gen_lr)
+              )
+        print(' *- Discriminator:' +
+              ' *- Current lr {0}, next update on epoch {1} to the value {2}'.format(
+                self.dis_lr, self.dis_lr_update_epoch, self.new_dis_lr)
               )
         
         self.train()

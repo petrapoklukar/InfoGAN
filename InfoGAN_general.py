@@ -240,6 +240,16 @@ class InfoGAN(nn.Module):
         ax2.set(xlabel='# epochs', ylabel='loss', title='Information loss')
         plt.savefig(self.save_path + '_ILoss')
         plt.close()
+        
+        fig2, ax2 = plt.subplots()
+        ax.plot(plt_data[:, 0], 'go-', linewidth=2, label='D loss')
+        ax.plot(plt_data[:, 1], 'bo-', linewidth=2, label='G loss')
+        ax2.plot(plt_data[:, 2], 'ro-', linewidth=2, label='I loss')
+        ax2.plot()
+        ax2.set_xlim(0, self.epochs)
+        ax2.set(xlabel='# epochs', ylabel='loss', title='All losses')
+        plt.savefig(self.save_path + '_Allosses')
+        plt.close()
     
     def sq_else_perm(self, img):
         """"""
@@ -449,13 +459,17 @@ class InfoGAN(nn.Module):
                 self.optimiser_D.zero_grad()
         
                 # Loss for real images
-                real_pred, _ = self.discriminator(real_x)
+                real_pred, _ = self.discriminator(real_x)                
+                assert(real_pred >= 0.).all()
+                assert(real_pred <= 1.).all()
                 d_real_loss = self.gan_loss(real_pred, real_labels)
         
                 # Loss for fake images
                 z_noise, dis_noise, con_noise = self.noise(batch_size)
                 fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
                 fake_pred, _ = self.discriminator(fake_x)
+                assert(fake_pred >= 0.).all()
+                assert(fake_pred <= 1.).all()
                 d_fake_loss = self.gan_loss(fake_pred, fake_labels)
         
                 # Total discriminator loss
