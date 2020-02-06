@@ -254,7 +254,7 @@ class InfoGAN(nn.Module):
         for i in range(plot_range):
             plt.subplot(n_subplots, n_subplots, 1 + i)
             plt.axis('off')
-            plt.imshow(images[i].detach().numpy())
+            plt.imshow(images[i].detach().cpu().numpy())
         plt.savefig(directory + filename)
         plt.clf()
         plt.close()
