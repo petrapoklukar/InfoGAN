@@ -207,7 +207,8 @@ class ConvolutionalDiscriminator(nn.Module):
             self.lin.add_module('lin' + str(i), nn.Linear(
                     self.layer_dims[i], self.layer_dims[i+1]))
             self.lin.add_module('lrelu' + str(i), nn.LeakyReLU(0.1, inplace=True))
-            self.lin.add_module('bn' + str(i), nn.BatchNorm1d(self.layer_dims[i+1]))
+            if i != len(self.layer_dims) - 2:
+                self.lin.add_module('bn' + str(i), nn.BatchNorm1d(self.layer_dims[i+1]))
         
         # Output layers for discriminator
         self.d_out = nn.Sequential(

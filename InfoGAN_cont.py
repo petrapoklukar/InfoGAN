@@ -205,7 +205,7 @@ class InfoGAN(nn.Module):
         plt.close()
         
         fig, ax = plt.subplots()
-        ax.plot(plt_data[:, 2], 'go-', linewidth=3, label='D loss')
+        ax.plot(plt_data[:, 0], 'go-', linewidth=3, label='D loss')
         ax.plot(plt_data[:, 1], 'bo--', linewidth=2, label='G loss')
         ax.plot()
         ax.legend()
@@ -215,7 +215,7 @@ class InfoGAN(nn.Module):
         plt.close()
         
         fig2, ax2 = plt.subplots()
-        ax2.plot(plt_data[:, 0], 'go-', linewidth=3, label='I loss')
+        ax2.plot(plt_data[:, 2], 'go-', linewidth=3, label='I loss')
         ax2.plot()
         ax2.set_xlim(0, self.epochs)
         ax2.set(xlabel='# epochs', ylabel='loss', title='Information loss')

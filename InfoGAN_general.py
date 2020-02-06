@@ -224,7 +224,7 @@ class InfoGAN(nn.Module):
         plt.close()
         
         fig, ax = plt.subplots()
-        ax.plot(plt_data[:, 2], 'go-', linewidth=3, label='D loss')
+        ax.plot(plt_data[:, 0], 'go-', linewidth=3, label='D loss')
         ax.plot(plt_data[:, 1], 'bo--', linewidth=2, label='G loss')
         ax.plot()
         ax.legend()
@@ -234,7 +234,7 @@ class InfoGAN(nn.Module):
         plt.close()
         
         fig2, ax2 = plt.subplots()
-        ax2.plot(plt_data[:, 0], 'go-', linewidth=3, label='I loss')
+        ax2.plot(plt_data[:, 2], 'go-', linewidth=3, label='I loss')
         ax2.plot()
         ax2.set_xlim(0, self.epochs)
         ax2.set(xlabel='# epochs', ylabel='loss', title='Information loss')
@@ -500,13 +500,13 @@ class InfoGAN(nn.Module):
             # ------------------------ #
             # --- Log the training --- #
             # ------------------------ #      
+            epoch_loss /= len(train_dataloader)
             print(
                 "[Epoch %d/%d] [D loss: %f] [G loss: %f] [info loss: %f]"
                 % (self.current_epoch, self.epochs, epoch_loss[0], 
                    epoch_loss[1], epoch_loss[2]))
                     
             # TODO: add logger here
-            epoch_loss /= len(train_dataloader)
             self.epoch_losses.append(epoch_loss)
             self.plot_model_loss()       
             self.save_checkpoint(epoch_loss)

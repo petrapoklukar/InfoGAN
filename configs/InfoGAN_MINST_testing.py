@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jan 27 12:18:48 2020
+Created on Thu Feb  6 10:46:53 2020
 
 @author: petrapoklukar
 """
+
 
 config = {
         'generator_config': {
@@ -46,8 +47,8 @@ config = {
                 
         'train_config': {
                 'batch_size': 64,
-                'epochs': 1000,
-                'snapshot': 50, 
+                'epochs': 10,
+                'snapshot': 2, 
                 'console_print': 1,
                 'gen_lr_schedule': [(0, 1e-3)],
                 'dis_lr_schedule': [(0, 2e-4)],

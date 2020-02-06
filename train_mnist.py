@@ -51,7 +51,7 @@ class ImageDataset(Dataset):
 if __name__ == '__main__':
     args = parser.parse_args()
     
-#    # Laptop TESTING
+    # Laptop TESTING
 #    args.config_name = 'InfoGAN_MINST_testing'
 #    args.train = 1
 #    args.chpnt_path = ''#'models/InfoGAN_MINST/infogan_checkpoint9.pth'
