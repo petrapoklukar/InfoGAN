@@ -38,7 +38,7 @@ config = {
         'optim_config': {
                 'optim_type': 'Adam',
                 'gen_lr': 1e-3,
-                'gen_b1': 0.9,
+                'gen_b1': 0.5,
                 'gen_b2': 0.999,
                 'dis_lr': 2e-4,
                 'dis_b1': 0.9,
@@ -48,12 +48,12 @@ config = {
         'train_config': {
                 'batch_size': 64,
                 'epochs': 100,
-                'snapshot': 10, 
+                'snapshot': 10,
                 'console_print': 1,
                 'gen_lr_schedule': [(0, 1e-3)],
                 'dis_lr_schedule': [(0, 2e-4)],
                 'lambda_cat': 1.,
-                'lambda_con': 0.5, 
+                'lambda_con': 0.1, 
                 'filename': 'infogan',
                 'random_seed': 1201
                 },
