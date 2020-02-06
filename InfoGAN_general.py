@@ -14,6 +14,7 @@ import torch.optim as optim
 import torch
 import InfoGAN_models
 import numpy as np
+import os
 import matplotlib
 matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
@@ -47,8 +48,10 @@ class InfoGAN(nn.Module):
         self.lambda_cat = train_config['lambda_cat']
         self.lambda_con = train_config['lambda_con']
         
+        self.exp_dir = train_config['exp_dir']
         self.save_path = train_config['exp_dir'] + '/' + train_config['filename']
         self.model_path = self.save_path + '_model.pt'
+        self.create_dirs()
         
         # Fix random seed
         torch.manual_seed(train_config['random_seed'])
@@ -57,6 +60,15 @@ class InfoGAN(nn.Module):
     # ---------------------- #
     # --- Init functions --- #
     # ---------------------- #
+    def create_dirs(self):
+        """Creates folders for saving training logs."""
+        self.test_dir = '{0}/Testing/'.format(self.exp_dir)
+        self.train_dir = '{0}/Training/'.format(self.exp_dir)
+        if (not os.path.isdir(self.test_dir)):
+            os.makedirs(self.test_dir)
+        if (not os.path.isdir(self.train_dir)):
+            os.makedirs(self.train_dir)
+        
     def init_generator(self):
         """Initialises the generator."""
         try:
@@ -191,7 +203,7 @@ class InfoGAN(nn.Module):
             plt.ylabel(plt_labels[i])
             plt.xlabel('# epochs')
             plt.legend()
-        plt.savefig(self.save_path + '_SnapshotLosses_{0}'.format(self.current_epoch))
+        plt.savefig(self.train_dir + 'SnapshotLosses_{0}'.format(self.current_epoch))
         plt.clf()
         plt.close()
     
@@ -227,6 +239,24 @@ class InfoGAN(nn.Module):
         ax2.set_xlim(0, self.epochs)
         ax2.set(xlabel='# epochs', ylabel='loss', title='Information loss')
         plt.savefig(self.save_path + '_ILoss')
+        plt.close()
+    
+    def sq_else_perm(self, img):
+        """"""
+        grayscale = True if img.shape[1] == 1 else False
+        return img.squeeze() if grayscale else img.permute(1,2,0)
+    
+    def plot_image_grid(self, images, filename, directory, n=25):
+        """Plots a grid of (generated) images."""
+        n_subplots = np.sqrt(n).astype(int)
+        plot_range = n_subplots ** 2
+        images = self.sq_else_perm(images)
+        for i in range(plot_range):
+            plt.subplot(n_subplots, n_subplots, 1 + i)
+            plt.axis('off')
+            plt.imshow(images[i].detach().numpy())
+        plt.savefig(directory + filename)
+        plt.clf()
         plt.close()
         
     def format_loss(self, losses_list):
@@ -331,6 +361,7 @@ class InfoGAN(nn.Module):
         
         # structured discrete code noise
         if batch_cat_c_dim is None:
+            # Generates a batch of random discrete codes if no is specified
             batch_cat_c_dim = np.random.randint(0, self.cat_c_dim, batch_size)
         dis_noise = np.zeros((batch_size, self.cat_c_dim)) 
         dis_noise[range(batch_size), batch_cat_c_dim] = 1.0 # bs, dis_classes
@@ -369,7 +400,6 @@ class InfoGAN(nn.Module):
             self.init_generator()
             self.init_Qnet()
             self.init_weights()
-            # TODO test start_epoch
             self.start_gen_epoch, self.gen_lr = self.gen_lr_schedule.pop(0)
             self.start_dis_epoch, self.dis_lr = self.dis_lr_schedule.pop(0)
             assert(self.start_gen_epoch == self.start_dis_epoch)
@@ -490,6 +520,19 @@ class InfoGAN(nn.Module):
                 # Plot snapshot losses
                 self.plot_snapshot_loss()
                 
+                # Plot images generated from random noise
+                z_noise, dis_noise, con_noise = self.noise(25)
+                gen_x = self.generator((z_noise, dis_noise, con_noise))
+                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
+                filename = 'genImages' + str(self.current_epoch)
+                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=25)
+                
+                # Plot images generated from the first discrete code
+                z_noise, dis_noise, con_noise = self.noise(25, batch_cat_c_dim=0)
+                gen_x = self.generator((z_noise, dis_noise, con_noise))
+                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
+                filename = 'genImages_c0' + str(self.current_epoch)
+                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=25)
         
         # ---------------------- #
         # --- Save the model --- #

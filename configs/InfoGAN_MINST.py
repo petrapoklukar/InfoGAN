@@ -46,8 +46,8 @@ config = {
                 
         'train_config': {
                 'batch_size': 64,
-                'epochs': 100,
-                'snapshot': 10, 
+                'epochs': 500,
+                'snapshot': 50, 
                 'console_print': 1,
                 'gen_lr_schedule': [(0, 1e-3)],
                 'dis_lr_schedule': [(0, 2e-4)],
@@ -59,6 +59,8 @@ config = {
                 
         'eval_config': {
                 'filepath': 'models/InfoGAN_MNIST/infogan_model.pt',
-                'load_checkpoint': False
+                'load_checkpoint': False,
+                'n_test_samples': 25,
+                'n_repeats': 5
                 }
         }

@@ -51,12 +51,12 @@ class ImageDataset(Dataset):
 if __name__ == '__main__':
     args = parser.parse_args()
     
-    # Laptop TESTING
-#    args.config_name = 'InfoGAN_MINST'
+#    # Laptop TESTING
+#    args.config_name = 'InfoGAN_MINST_testing'
 #    args.train = 1
-#    args.chpnt_path = 'models/InfoGAN_MINST/infogan_checkpoint9.pth'
+#    args.chpnt_path = ''#'models/InfoGAN_MINST/infogan_checkpoint9.pth'
 #    args.device = None
-#    args.eval = None
+#    args.eval = 1
     
     # Load config
     config_file = os.path.join('.', 'configs', args.config_name + '.py')
@@ -102,44 +102,50 @@ if __name__ == '__main__':
         eval_config = config_file['eval_config']
         if not args.train:
             model.load_model(eval_config)
-        if device.type == 'cpu': 
+        if str(device) == 'cpu': 
             # Reimport interactive backend
             import matplotlib
             matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
             import matplotlib.pyplot as plt
         
-        # Fix usual noise and the categorical noise, sample structured continous noise
         n_samples = eval_config['n_test_samples']
-        fix_z_noise = torch.empty((1, model.z_dim), device=model.device).normal_()
-        fix_z_noise = fix_z_noise.expand((n_samples, model.z_dim))
+        n_repeats = eval_config['n_repeats']
+
+        # Sample usual noise and the categorical noise, fix structured continous noise
+        for con_noise_id in range(model.con_c_dim):
+            for repeat in range(n_repeats):
+            
+                # Fix one structured continuous noise variable
+                fixed_con_noise = model.sample_fixed_noise(1, 1, 'uniform')
+                fixed_con_noise = fixed_con_noise.expand((n_samples, 1))
+                
+                # Sample the rest and keep the fixed one
+                z_noise, dis_noise, con_noise = model.noise(n_samples)
+                con_noise[:, con_noise_id] = fixed_con_noise.squeeze()
+                
+                # Generate an image
+                gen_x = model.generator((z_noise, dis_noise, con_noise))
+                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
+                filename = 'evalImages_cont{0}_r{1}'.format(str(con_noise_id),
+                                            str(repeat))
+                model.plot_image_grid(gen_x_plotrescale, filename, model.test_dir,
+                                      n=n_samples)
+
+
         
-        fix_cat_noise = torch.empty((1, model.cat_c_dim), device=model.device).uniform_()
-        fix_cat_noise = fix_cat_noise.expand((n_samples, model.cat_c_dim)) 
-        
-        sampled_cont_noise = model.sample_fixed_noise(
-                n_samples, model.con_c_dim, ntype='normal')
-        gen_con_samples = model.generator((fix_z_noise, fix_cat_noise, sampled_cont_noise))
-        gen_con_samples = gen_con_samples.detach().squeeze()
-        
-        plt.figure(1)
-        for i in range(n_samples):
-            plt.subplot(n_samples, 1, i+1)
-            plt.imshow(gen_con_samples[i])
-        plt.savefig(eval_config['savefig_path'] + 'sampledStructuredContNoise')
-        plt.close()
-        
-        # Fix usual noise and the continous noise, sample structured categorical noise
-        fix_cont_noise = torch.empty((1, model.con_c_dim), device=model.device).normal_()
-        fix_cont_noise = fix_cont_noise.expand((n_samples, model.con_c_dim))
-        
-        sampled_cat_noise = model.sample_fixed_noise(
-                n_samples, model.cat_c_dim, ntype='uniform')
-        gen_nor_samples = model.generator((fix_z_noise, sampled_cat_noise, fix_cont_noise))
-        gen_nor_samples = gen_nor_samples.detach().squeeze()
-        
-        plt.figure(2)
-        for i in range(n_samples):
-            plt.subplot(n_samples, 1, i+1)
-            plt.imshow(gen_con_samples[i])
-        plt.savefig(eval_config['savefig_path'] + 'sampledStructuredCatNoise')
-        plt.close()
+        # Sample usual noise and the continous noise, fix structured categorical noise
+        for cat_noise_id in range(model.cat_c_dim):
+            for repeat in range(n_repeats):
+            
+                # Sample the rest and keep the fixed one
+                z_noise, dis_noise, con_noise = model.noise(
+                        n_samples, batch_cat_c_dim=cat_noise_id)
+                con_noise[:, con_noise_id] = fixed_con_noise.squeeze()
+                
+                # Generate an image
+                gen_x = model.generator((z_noise, dis_noise, con_noise))
+                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
+                filename = 'evalImages_cat{0}_r{1}'.format(str(con_noise_id),
+                                            str(repeat))
+                model.plot_image_grid(gen_x_plotrescale, filename, model.test_dir,
+                                      n=n_samples)
