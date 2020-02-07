@@ -49,7 +49,7 @@ config = {
                 'epochs': 1000,
                 'snapshot': 50, 
                 'console_print': 1,
-                'gen_lr_schedule': [(0, 1e-3)],
+                'gen_lr_schedule': [(0, 5e-05)],
                 'dis_lr_schedule': [(0, 2e-4)],
                 'lambda_cat': 1.,
                 'lambda_con': 0.5, 

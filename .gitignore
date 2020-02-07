@@ -5,4 +5,4 @@ dataset
 *.npz
 *.pth
 models
-
+train_mnist_laptoptesting.py
