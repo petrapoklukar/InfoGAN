@@ -176,7 +176,8 @@ class ConvolutionalGenerator(nn.Module):
             self.conv.add_module('conv_bn' + str(i), nn.BatchNorm2d(self.channel_dims[i]))
         self.conv.add_module('conv2d_last' + str(i), nn.ConvTranspose2d(
                     self.channel_dims[-2], self.channel_dims[-1], 4, stride=2, padding=3))
-        self.conv.add_module('conv2d_tanh', nn.Tanh())
+#        self.conv.add_module('conv2d_tanh', nn.Tanh())
+        self.conv.add_module('conv2d_sigmoid', nn.Sigmoid())
 
     def forward(self, *args):
         gen_input = torch.cat((*args), -1)
