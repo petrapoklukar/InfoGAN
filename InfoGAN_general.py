@@ -477,8 +477,8 @@ class InfoGAN(nn.Module):
                 # Total discriminator loss
                 d_loss = d_real_loss + d_fake_loss
         
-                d_loss.backward()
-                self.optimiser_D.step()
+#                d_loss.backward()
+#                self.optimiser_D.step()
 
                 # ---------------------------------- #
                 # --- Train the Generator & QNet --- #
@@ -508,9 +508,14 @@ class InfoGAN(nn.Module):
                 i_loss = self.lambda_cat * self.categorical_loss(pred_dis_code, gt_labels) + \
                     self.lambda_con * self.gaussian_loss(con_noise, pred_con_mean, pred_con_logvar)
                 
-                g_loss += i_loss 
+                g_loss += i_loss                 
                 g_loss.backward()
                 self.optimiser_G.step()
+
+                d_loss += i_loss
+                d_loss.backward()
+                self.optimiser_D.step()
+                
                 epoch_loss += self.format_loss([d_loss, g_loss, i_loss])
         
             # ------------------------ #
