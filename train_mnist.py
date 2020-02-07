@@ -36,7 +36,8 @@ class ImageDataset(Dataset):
         else:
             self.device = device
 
-        transform_list = transforms.Compose([transforms.ToTensor()]) 
+        transform_list = transforms.Compose([transforms.ToTensor(), 
+                                             lambda x: 2*x - 1]) 
         if dataset_name == 'MNIST':
             self.data = datasets.MNIST(path_to_data, train=True,
                                  download=True, transform=transform_list)

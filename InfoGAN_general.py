@@ -539,16 +539,16 @@ class InfoGAN(nn.Module):
                 # Plot images generated from random noise
                 z_noise, dis_noise, con_noise = self.noise(25)
                 gen_x = self.generator((z_noise, dis_noise, con_noise))
-#                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
+                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
                 filename = 'genImages' + str(self.current_epoch)
-                self.plot_image_grid(gen_x, filename, self.train_dir, n=25)
+                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=25)
                 
                 # Plot images generated from the first discrete code
                 z_noise, dis_noise, con_noise = self.noise(25, batch_cat_c_dim=0)
                 gen_x = self.generator((z_noise, dis_noise, con_noise))
-#                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
+                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
                 filename = 'genImages_c0' + str(self.current_epoch)
-                self.plot_image_grid(gen_x, filename, self.train_dir, n=25)
+                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=25)
         
         # ---------------------- #
         # --- Save the model --- #
