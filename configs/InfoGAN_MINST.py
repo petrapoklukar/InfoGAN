@@ -50,9 +50,9 @@ config = {
                 'snapshot': 50, 
                 'console_print': 1,
                 'gen_lr_schedule': [(0, 1e-3)],
-                'dis_lr_schedule': [(0, 2e-5)],
+                'dis_lr_schedule': [(0, 2e-4)],
                 'lambda_cat': 1.,
-                'lambda_con': 0.5, 
+                'lambda_con': 0.1, 
                 'filename': 'infogan',
                 'random_seed': 1201
                 },
