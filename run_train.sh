@@ -31,3 +31,5 @@ python train_mnist.py \
         --device='cuda' \
 
 HERE
+
+# python train_mnist.py --config_name='InfoGAN_MINST' --train=1 --eval=0 --device='cuda' 

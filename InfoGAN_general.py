@@ -460,16 +460,16 @@ class InfoGAN(nn.Module):
         
                 # Loss for real images
                 real_pred, _ = self.discriminator(real_x)                
-                assert(real_pred >= 0.).all()
-                assert(real_pred <= 1.).all()
+                assert(real_pred >= 0.).all(), real_pred
+                assert(real_pred <= 1.).all(), real_pred
                 d_real_loss = self.gan_loss(real_pred, real_labels)
         
                 # Loss for fake images
                 z_noise, dis_noise, con_noise = self.noise(batch_size)
                 fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
                 fake_pred, _ = self.discriminator(fake_x)
-                assert(fake_pred >= 0.).all()
-                assert(fake_pred <= 1.).all()
+                assert(fake_pred >= 0.).all(), fake_pred
+                assert(fake_pred <= 1.).all(), fake_pred
                 d_fake_loss = self.gan_loss(fake_pred, fake_labels)
         
                 # Total discriminator loss
