@@ -509,7 +509,7 @@ class InfoGAN(nn.Module):
                     self.lambda_con * self.gaussian_loss(con_noise, pred_con_mean, pred_con_logvar)
                 
                 g_loss += i_loss                 
-                g_loss.backward()
+                g_loss.backward(retain_graph=True)
                 self.optimiser_G.step()
 
                 d_loss += i_loss
