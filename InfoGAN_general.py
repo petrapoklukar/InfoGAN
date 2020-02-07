@@ -460,6 +460,7 @@ class InfoGAN(nn.Module):
         
                 # Loss for real images
                 real_pred, _ = self.discriminator(real_x)                
+                assert torch.isnan(real_pred).any(), real_pred
                 assert(real_pred >= 0.).all(), real_pred
                 assert(real_pred <= 1.).all(), real_pred
                 d_real_loss = self.gan_loss(real_pred, real_labels)
@@ -467,6 +468,7 @@ class InfoGAN(nn.Module):
                 # Loss for fake images
                 z_noise, dis_noise, con_noise = self.noise(batch_size)
                 fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
+                assert torch.isnan(fake_x).any(), fake_x
                 fake_pred, _ = self.discriminator(fake_x)
                 assert(fake_pred >= 0.).all(), fake_pred
                 assert(fake_pred <= 1.).all(), fake_pred
