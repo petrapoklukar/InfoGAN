@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Mar  9 12:05:10 2020
+Created on Mon Mar  9 15:59:59 2020
 
 @author: petrapoklukar
 """
@@ -48,13 +48,13 @@ config = {
                 'gen_lr_schedule': [(0, 1e-3)],
                 'dis_lr_schedule': [(0, 2e-4)],
                 'lambda_cat': 1.,
-                'lambda_con': 0.1, 
+                'lambda_con': 0.5, 
                 'filename': 'infogan',
                 'random_seed': 1201
                 },
                 
         'eval_config': {
-                'filepath': 'models/InfoGAN_MNIST_A1/infogan_model.pt',
+                'filepath': 'models/InfoGAN_MNIST_A2_Lambda0/infogan_model.pt',
                 'load_checkpoint': False,
                 'n_test_samples': 25,
                 'n_repeats': 5

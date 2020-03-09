@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Mar  9 12:05:10 2020
+Created on Mon Mar  9 15:58:17 2020
 
 @author: petrapoklukar
 """
@@ -54,7 +54,7 @@ config = {
                 },
                 
         'eval_config': {
-                'filepath': 'models/InfoGAN_MNIST_A1/infogan_model.pt',
+                'filepath': 'models/InfoGAN_MNIST_A2/infogan_model.pt',
                 'load_checkpoint': False,
                 'n_test_samples': 25,
                 'n_repeats': 5
