@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Nov 21 14:21:00 2019
+Created on Mon Mar  9 12:06:25 2020
 
 @author: petrapoklukar
 
@@ -92,18 +92,7 @@ class InfoGAN(nn.Module):
                     'Discriminator class {0} not recognized'.format(
                             self.config['discriminator_config']['class_name']))
     
-    def init_Qnet(self):
-        """Initialises the q network."""
-        try:
-            class_ = getattr(InfoGAN_models, self.config['Qnet_config']['class_name'])
-            self.Qnet = class_(self.config['Qnet_config'], self.data_config).to(self.device)
-            print(' *- Initialised QNet: ', self.config['Qnet_config']['class_name'])
-        except: 
-            raise NotImplementedError(
-                    'QNet class {0} not recognized'.format(
-                            self.config['Qnet_config']['class_name']))
-    
-            
+                
     def init_weights(self, m):
         # TODO: tune this
         """Custom weight init"""
@@ -127,7 +116,7 @@ class InfoGAN(nn.Module):
         if optim_type == 'Adam':
             # Generator & QNet optimiser
             self.optimiser_G = optim.Adam(
-                    list(self.generator.parameters()) + list(self.Qnet.parameters()),
+                    self.generator.parameters(),
                     lr=optim_config['gen_lr'], 
                     betas=(optim_config['gen_b1'], optim_config['gen_b2']))
             print(' *- Initialised generator optimiser: Adam')
@@ -416,10 +405,8 @@ class InfoGAN(nn.Module):
             # Initialise the models, weights and optimisers
             self.init_discriminator()
             self.init_generator()
-            self.init_Qnet()
             self.discriminator.apply(self.init_weights)
             self.generator.apply(self.init_weights)
-            self.Qnet.apply(self.init_weights)
             self.start_gen_epoch, self.gen_lr = self.gen_lr_schedule.pop(0)
             self.start_dis_epoch, self.dis_lr = self.dis_lr_schedule.pop(0)
             assert(self.start_gen_epoch == self.start_dis_epoch)
@@ -458,20 +445,19 @@ class InfoGAN(nn.Module):
                 
                 # Ground truths
                 batch_size = x.shape[0]
-
-#                x = x.view(batch_size, -1) # DEBUG 553 on yumidata
                 real_x = x.to(self.device)        
                 real_labels = torch.ones(batch_size, 1, device=self.device)
                 fake_labels = torch.zeros(batch_size, 1, device=self.device)
                 
-                dinput_noise = torch.empty(real_x.size()).normal_(mean=0, std=0.1)
+#                dinput_noise = torch.empty(real_x.size()).normal_(mean=0, std=0.1)
+                
                 # ------------------------------- #
                 # --- Train the Discriminator --- #
                 # ------------------------------- #
                 self.optimiser_D.zero_grad()
         
                 # Loss for real images
-                real_pred, _ = self.discriminator(real_x + dinput_noise)                
+                real_pred, _ = self.discriminator(real_x)                
                 assert torch.sum(torch.isnan(real_pred)) == 0, real_pred
                 assert(real_pred >= 0.).all(), real_pred
                 assert(real_pred <= 1.).all(), real_pred
@@ -482,32 +468,15 @@ class InfoGAN(nn.Module):
                 z_noise, dis_noise, con_noise = self.noise(batch_size)
                 fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
                 assert torch.sum(torch.isnan(fake_x)) == 0, fake_x
-                fake_pred, _ = self.discriminator(fake_x + dinput_noise)
+                fake_pred, _ = self.discriminator(fake_x)
                 assert(fake_pred >= 0.).all(), fake_pred
                 assert(fake_pred <= 1.).all(), fake_pred
                 d_fake_loss = self.gan_loss(fake_pred, fake_labels)
                 D_G_z1 = fake_pred.mean().item()
                 
-                # Total discriminator loss
-                d_loss = d_real_loss + d_fake_loss       
-                d_loss.backward()
-                self.optimiser_D.step()
-#                print('Discriminator gradients:')
-#                self.get_gradients(self.discriminator)
-
-                # ---------------------------------- #
-                # --- Train the Generator & QNet --- #
-                # ---------------------------------- #
-                self.optimiser_G.zero_grad()
-        
-                # - THE USUAL GENERATOR LOSS        
-                # Loss measures generator's ability to fool the discriminator
-                # Push fake samples through the update discriminator
-                fake_pred, fake_features = self.discriminator(fake_x + dinput_noise)
-                g_loss = self.gan_loss(fake_pred, real_labels)
-                D_G_z2 = fake_pred.mean().item()
-        
-                # - INFORMATION LOSS
+                # Since discriminator and Q share the weights we need
+                # to calculate the info loss
+                
                 # Sampled ground truth labels, see eq 5 in the paper
                 sampled_labels = np.random.randint(0, self.cat_c_dim, batch_size)
                 gt_labels = torch.LongTensor(sampled_labels).to(self.device)
@@ -518,11 +487,30 @@ class InfoGAN(nn.Module):
         
                 # Push it through QNet
                 gen_x = self.generator((z_noise, dis_noise, con_noise))
-                _, gen_features = self.discriminator(gen_x + dinput_noise) 
-                pred_dis_code, pred_con_mean, pred_con_logvar = self.Qnet(gen_features)
+                _, pred_dis_code, pred_con_mean, pred_con_logvar = self.discriminator(gen_x) 
         
                 i_loss = self.lambda_cat * self.categorical_loss(pred_dis_code, gt_labels) + \
                     self.lambda_con * self.gaussian_loss(con_noise, pred_con_mean, pred_con_logvar)
+                
+                
+                # Total discriminator loss
+                d_loss = d_real_loss + d_fake_loss - i_loss       
+                d_loss.backward(retain_graph=True)
+                self.optimiser_D.step()
+#                print('Discriminator gradients:')
+#                self.get_gradients(self.discriminator)
+
+                # --------------------------- #
+                # --- Train the Generator --- #
+                # --------------------------- #
+                self.optimiser_G.zero_grad()
+        
+                # - THE USUAL GENERATOR LOSS        
+                # Loss measures generator's ability to fool the discriminator
+                # Push fake samples through the update discriminator
+                fake_pred, fake_features = self.discriminator(fake_x)
+                g_loss = self.gan_loss(fake_pred, real_labels)
+                D_G_z2 = fake_pred.mean().item()
                 
                 g_loss += i_loss                 
                 g_loss.backward()

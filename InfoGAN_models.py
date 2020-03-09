@@ -58,15 +58,18 @@ class QNet(nn.Module):
         self.forward_pass = self.continous_forward
         
         # Model structured continuous code as Gaussian
-        self.con_layer_mean = nn.Linear(self.last_layer_dim, self.n_continuous_codes)
-        self.con_layer_logvar = nn.Linear(self.last_layer_dim, self.n_continuous_codes)
+        self.con_layer_mean = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
+                                        bias=False)
+        self.con_layer_logvar = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
+                                          bias=False)
         
         if self.n_categorical_codes > 0:
             # Structured categorical code
             self.forward_pass = self.full_forward
             print('forward_pass set to full.')
             self.cat_layer = nn.Sequential(
-                    nn.Linear(self.last_layer_dim, self.n_categorical_codes), 
+                    nn.Linear(self.last_layer_dim, self.n_categorical_codes,
+                              bias=False), 
                     nn.Softmax(dim=-1))
     
     def continous_forward(self, x):
@@ -161,8 +164,9 @@ class ConvolutionalGenerator(nn.Module):
 
         self.lin = nn.Sequential()
         for i in range(len(self.layer_dims) - 1):
-            self.lin.add_module('lin' + str(i), nn.Linear(self.layer_dims[i], self.layer_dims[i+1]))
-            self.lin.add_module('lin_relu' + str(i), nn.ReLU())
+            self.lin.add_module('lin' + str(i), nn.Linear(
+                    self.layer_dims[i], self.layer_dims[i+1], bias=False))
+            self.lin.add_module('lin_relu' + str(i), nn.ReLU(inplace=True))
             self.lin.add_module('lin_bn' + str(i), nn.BatchNorm1d(self.layer_dims[i+1]))
         self.lin.add_module('lin_to_conv', LinToConv(self.layer_dims[-1], self.channel_dims[0]))
     
@@ -171,11 +175,13 @@ class ConvolutionalGenerator(nn.Module):
         self.conv = nn.Sequential()
         for i in range(1, len(self.channel_dims) - 1):
             self.conv.add_module('conv2d' + str(i), nn.ConvTranspose2d(
-                    self.channel_dims[i-1], self.channel_dims[i], 4, stride=2))
-            self.conv.add_module('conv_relu' + str(i), nn.ReLU())
+                    self.channel_dims[i-1], self.channel_dims[i], 4, stride=2, 
+                    bias=False))
+            self.conv.add_module('conv_relu' + str(i), nn.ReLU(inplace=True))
             self.conv.add_module('conv_bn' + str(i), nn.BatchNorm2d(self.channel_dims[i]))
         self.conv.add_module('conv2d_last' + str(i), nn.ConvTranspose2d(
-                    self.channel_dims[-2], self.channel_dims[-1], 4, stride=2, padding=3))
+                    self.channel_dims[-2], self.channel_dims[-1], 4, stride=2, padding=3,
+                    bias=False))
         self.conv.add_module('conv2d_tanh', nn.Tanh())
 #        self.conv.add_module('conv2d_sigmoid', nn.Sigmoid())
 
@@ -193,12 +199,17 @@ class ConvolutionalDiscriminator(nn.Module):
 
         self.channel_dims = dis_config['channel_dims']
         self.layer_dims = dis_config['layer_dims']
+        self.last_layer_dim = dis_config['last_layer_dim']
+        self.n_categorical_codes = data_config['structured_cat_dim']
+        self.n_continuous_codes = data_config['structured_con_dim']
+        self.forward_pass = self.continous_forward
 
         self.conv = nn.Sequential()
         for i in range(len(self.channel_dims) - 1):
             self.conv.add_module('conv2d' + str(i), nn.Conv2d(
-                    self.channel_dims[i], self.channel_dims[i+1], 4, stride=2))
-            self.conv.add_module('lrelu' + str(i), nn.LeakyReLU(0.1, inplace=True))
+                    self.channel_dims[i], self.channel_dims[i+1], 4, stride=2,
+                    bias=False))
+            self.conv.add_module('lrelu' + str(i), nn.LeakyReLU(0.2, inplace=True))
             if i > 0:
                 self.conv.add_module('bn' + str(i), nn.BatchNorm2d(self.channel_dims[i+1]))
         
@@ -206,14 +217,83 @@ class ConvolutionalDiscriminator(nn.Module):
         self.lin.add_module('conv_to_lin', ConvToLin())
         for i in range(len(self.layer_dims) - 1):
             self.lin.add_module('lin' + str(i), nn.Linear(
-                    self.layer_dims[i], self.layer_dims[i+1]))
-            self.lin.add_module('lrelu' + str(i), nn.LeakyReLU(0.1, inplace=True))
+                    self.layer_dims[i], self.layer_dims[i+1], bias=False))
+            self.lin.add_module('lrelu' + str(i), nn.LeakyReLU(0.2, inplace=True))
             if i != len(self.layer_dims) - 2:
                 self.lin.add_module('bn' + str(i), nn.BatchNorm1d(self.layer_dims[i+1]))
         
         # Output layers for discriminator
         self.d_out = nn.Sequential(
-                nn.Linear(self.layer_dims[-1], 1),
+                nn.Linear(self.layer_dims[-1], 1, bias=False),
+                nn.Sigmoid())
+        
+        # Output Gaussian layer for structured continuous codes
+        self.con_layer_mean = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
+                                        bias=False)
+        self.con_layer_logvar = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
+                                          bias=False)
+        
+        # Output Sofmax layer for structured categorical codes
+        if self.n_categorical_codes > 0:
+            # Structured categorical code
+            self.forward_pass = self.full_forward
+            print('forward_pass set to full.')
+            self.cat_layer = nn.Sequential(
+                    nn.Linear(self.last_layer_dim, self.n_categorical_codes,
+                              bias=False), 
+                    nn.Softmax(dim=-1))
+    
+    def continous_forward(self, validity, x):
+        """Forward pass without structured categorical code"""
+        con_code_mean = self.con_layer_mean(x) # Structured continuous code
+        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
+        return validity, con_code_mean, con_code_logvar
+    
+    def full_forward(self, validity, x):
+        """Forward pass with structured categorical and continuous codes"""
+        cat_code = self.cat_layer(x) # Structured categorical code
+        con_code_mean = self.con_layer_mean(x) # Structured continuous code
+        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
+        return validity, cat_code, con_code_mean, con_code_logvar
+
+    def forward(self, x):
+        out_conv = self.conv(x) 
+        out_lin = self.lin(out_conv) # Last shared layer
+        
+        # Add Q output to the usual discriminator output
+        validity = self.d_out(out_lin) 
+        return self.forward_pass(validity, out_lin) 
+    
+    
+class ConvolutionalDiscriminator_withoutQNet(nn.Module):
+    def __init__(self, dis_config, data_config):
+        super(ConvolutionalDiscriminator, self).__init__()
+        self.dis_config = dis_config
+
+        self.channel_dims = dis_config['channel_dims']
+        self.layer_dims = dis_config['layer_dims']
+
+        self.conv = nn.Sequential()
+        for i in range(len(self.channel_dims) - 1):
+            self.conv.add_module('conv2d' + str(i), nn.Conv2d(
+                    self.channel_dims[i], self.channel_dims[i+1], 4, stride=2,
+                    bias=False))
+            self.conv.add_module('lrelu' + str(i), nn.LeakyReLU(0.2, inplace=True))
+            if i > 0:
+                self.conv.add_module('bn' + str(i), nn.BatchNorm2d(self.channel_dims[i+1]))
+        
+        self.lin = nn.Sequential()
+        self.lin.add_module('conv_to_lin', ConvToLin())
+        for i in range(len(self.layer_dims) - 1):
+            self.lin.add_module('lin' + str(i), nn.Linear(
+                    self.layer_dims[i], self.layer_dims[i+1], bias=False))
+            self.lin.add_module('lrelu' + str(i), nn.LeakyReLU(0.2, inplace=True))
+            if i != len(self.layer_dims) - 2:
+                self.lin.add_module('bn' + str(i), nn.BatchNorm1d(self.layer_dims[i+1]))
+        
+        # Output layers for discriminator
+        self.d_out = nn.Sequential(
+                nn.Linear(self.layer_dims[-1], 1, bias=False),
                 nn.Sigmoid())
         
     def forward(self, x):

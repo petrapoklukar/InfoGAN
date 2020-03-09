@@ -100,21 +100,29 @@ class InfoGAN(nn.Module):
                     'QNet class {0} not recognized'.format(
                             self.config['Qnet_config']['class_name']))
     
-    def init_weights(self):
-        # TODO: tune this
-        """Custom weight init"""
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
-                if m.bias is not None:
-                    torch.nn.init.constant_(m.bias.data, 0)
-            elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
-                torch.nn.init.constant_(m.weight.data, 1)
-                torch.nn.init.constant_(m.bias.data, 0)
-            elif isinstance(m, nn.Linear):
-                torch.nn.init.normal_(m.weight.data, std=1e-3)
-                if m.bias is not None:
-                    torch.nn.init.constant_(m.bias.data, 0)
+    def init_weights(self, m):
+        classname = m.__class__.__name__
+        if classname.find('Conv') != -1:
+            nn.init.normal_(m.weight.data, 0.0, 0.02)
+        elif classname.find('BatchNorm') != -1:
+            nn.init.normal_(m.weight.data, 1.0, 0.02)
+            nn.init.constant_(m.bias.data, 0)
+        
+#    def init_weights(self):
+#        # TODO: tune this
+#        """Custom weight init"""
+#        for m in self.modules():
+#            if isinstance(m, nn.Conv2d):
+#                torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
+#                if m.bias is not None:
+#                    torch.nn.init.constant_(m.bias.data, 0)
+#            elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+#                torch.nn.init.constant_(m.weight.data, 1)
+#                torch.nn.init.constant_(m.bias.data, 0)
+#            elif isinstance(m, nn.Linear):
+#                torch.nn.init.normal_(m.weight.data, std=1e-3)
+#                if m.bias is not None:
+#                    torch.nn.init.constant_(m.bias.data, 0)
 
     def init_optimisers(self):
         """Initialises the optimisers."""
@@ -370,7 +378,9 @@ class InfoGAN(nn.Module):
             self.init_discriminator()
             self.init_generator()
             self.init_Qnet()
-            self.init_weights()
+            self.discriminator.apply(self.init_weights)
+            self.generator.apply(self.init_weights)
+            self.Qnet.apply(self.init_weights)
             self.start_gen_epoch, self.gen_lr = self.gen_lr_schedule.pop(0)
             self.start_dis_epoch, self.dis_lr = self.dis_lr_schedule.pop(0)
             assert(self.start_gen_epoch == self.start_dis_epoch)
