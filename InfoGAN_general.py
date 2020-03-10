@@ -510,9 +510,9 @@ class InfoGAN(nn.Module):
                 # Total discriminator loss
                 d_loss = d_real_loss + d_fake_loss       
                 
-                if i % self.discriminator_update_step == 0:
-                    d_loss.backward()
-                    self.optimiser_D.step()
+#                if i % self.discriminator_update_step == 0:
+                d_loss.backward()
+                self.optimiser_D.step()
 #                print('Discriminator gradients:')
 #                self.get_gradients(self.discriminator)
 
@@ -545,9 +545,8 @@ class InfoGAN(nn.Module):
                 i_loss = self.lambda_cat * self.categorical_loss(pred_dis_code, gt_labels) + \
                     self.lambda_con * self.gaussian_loss(con_noise, pred_con_mean, pred_con_logvar)
                 
-                if i % self.discriminator_update_step == 0:
-                    g_loss += i_loss       
-                    
+#                if i % self.discriminator_update_step == 0:
+                g_loss += i_loss       
                 g_loss.backward()
                 self.optimiser_G.step()
 #                print('Generator gradients:')
