@@ -42,9 +42,9 @@ config = {
                 
         'train_config': {
                 'batch_size': 128,
-                'epochs': 1000,
-                'snapshot': 50, 
-                'console_print': 10,
+                'epochs': 100,
+                'snapshot': 20, 
+                'console_print': 1,
                 'gen_lr_schedule': [(0, 1e-3)],
                 'dis_lr_schedule': [(0, 2e-4)],
                 'lambda_cat': 1.,

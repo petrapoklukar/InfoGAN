@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jan 27 12:18:48 2020
+Created on Tue Mar 10 11:28:34 2020
 
 @author: petrapoklukar
 """
@@ -47,12 +47,12 @@ config = {
         'train_config': {
                 'batch_size': 128,
                 'epochs': 100,
-                'snapshot': 50, 
+                'snapshot': 20, 
                 'console_print': 1,
                 'gen_lr_schedule': [(0, 1e-3)],
                 'dis_lr_schedule': [(0, 2e-4)],
-                'lambda_cat': 0., #1.,
-                'lambda_con': 0., #0.1, 
+                'lambda_cat': 1.,
+                'lambda_con': 0.5, 
                 'filename': 'infogan',
                 'random_seed': 1201
                 },

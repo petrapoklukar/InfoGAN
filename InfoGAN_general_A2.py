@@ -38,6 +38,7 @@ class InfoGAN(nn.Module):
         self.z_dim = self.data_config['usual_noise_dim']
         self.cat_c_dim = self.data_config['structured_cat_dim']
         self.con_c_dim = self.data_config['structured_con_dim']
+        self.fix_noise()
 
         # Training parameters
         train_config = config['train_config']
@@ -64,6 +65,7 @@ class InfoGAN(nn.Module):
         # Fix random seed
         torch.manual_seed(train_config['random_seed'])
         np.random.seed(train_config['random_seed'])
+        self.monitor_generator = 1
 
     # ---------------------- #
     # --- Init functions --- #
@@ -161,6 +163,15 @@ class InfoGAN(nn.Module):
                 dim=nonbatch_dims) # batch_size
         avg_loss = torch.mean(batch_loss)
         return avg_loss
+    
+    def fix_noise(self):
+        """Fixes noise to monitor the progress of the generator."""
+        batch_cat_codes = np.arange(self.cat_c_dim).repeat(10)
+        z_noise, dis_noise, con_noise = self.noise(100, batch_cat_c_dim=batch_cat_codes)
+        
+        self.fixed_z_noise = z_noise
+        self.fixed_dis_noise = dis_noise
+        self.fixed_con_noise = con_noise
 
     # ---------------------------- #
     # --- Monitoring functions --- #
@@ -550,7 +561,6 @@ class InfoGAN(nn.Module):
             self.save_checkpoint(epoch_loss)
             
             if (self.current_epoch + 1) % self.snapshot == 0:
-    
                 # Save the checkpoint & logs, plot snapshot losses
                 self.save_checkpoint(epoch_loss, keep=True)
                 self.save_logs()
@@ -558,19 +568,27 @@ class InfoGAN(nn.Module):
                 # Plot snapshot losses
                 self.plot_snapshot_loss()
                 
-                # Plot images generated from random noise
-                z_noise, dis_noise, con_noise = self.noise(25)
-                gen_x = self.generator((z_noise, dis_noise, con_noise))
+            if (self.current_epoch + 1) % self.monitor_generator == 0:
+                # Plot images generated from fixed noise
+                gen_x = self.generator((self.fixed_z_noise, self.fixed_dis_noise, 
+                                        self.fixed_con_noise)) 
                 gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
                 filename = 'genImages' + str(self.current_epoch)
-                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=25)
+                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=100)
                 
-                # Plot images generated from the first discrete code
-                z_noise, dis_noise, con_noise = self.noise(25, batch_cat_c_dim=0)
-                gen_x = self.generator((z_noise, dis_noise, con_noise))
-                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
-                filename = 'genImages_c0' + str(self.current_epoch)
-                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=25)
+#                # Plot images generated from random noise
+#                z_noise, dis_noise, con_noise = self.noise(25)
+#                gen_x = self.generator((z_noise, dis_noise, con_noise))
+#                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
+#                filename = 'genImages' + str(self.current_epoch)
+#                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=25)
+#                
+#                # Plot images generated from the first discrete code
+#                z_noise, dis_noise, con_noise = self.noise(25, batch_cat_c_dim=0)
+#                gen_x = self.generator((z_noise, dis_noise, con_noise))
+#                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
+#                filename = 'genImages_c0' + str(self.current_epoch)
+#                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=25)
         
         # ---------------------- #
         # --- Save the model --- #
@@ -599,7 +617,7 @@ class InfoGAN(nn.Module):
                     '*- Model path: {0}\n'.format(self.model_path),
                     '*- Generator learning rate schedule: {0}\n'.format(self.init_gen_lr_schedule),
                     '*- Discriminator learning rate schedule: {0}\n'.format(self.init_dis_lr_schedule),
-                    '*- Training epoch losses: (model_loss, recon_loss, kl_loss)\n'
+                    '*- Training epoch losses: (d_loss, g_loss, i_loss)\n'
                     ])
             f.writelines(list(map(
                     lambda t: '{0:>3} Epoch {4}: ({1:.2f}, {2:.2f}, {3:.2f})\n'.format(

@@ -267,7 +267,7 @@ class ConvolutionalDiscriminator(nn.Module):
     
 class ConvolutionalDiscriminator_withoutQNet(nn.Module):
     def __init__(self, dis_config, data_config):
-        super(ConvolutionalDiscriminator, self).__init__()
+        super(ConvolutionalDiscriminator_withoutQNet, self).__init__()
         self.dis_config = dis_config
 
         self.channel_dims = dis_config['channel_dims']

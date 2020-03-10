@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Mar  9 12:05:10 2020
+Created on Mon Jan 27 12:18:48 2020
 
 @author: petrapoklukar
 """
@@ -17,7 +17,11 @@ config = {
         'discriminator_config': {
                 'class_name': 'ConvolutionalDiscriminator',
                 'channel_dims': [1, 64, 128],
-                'layer_dims': [128*5*5, 1024, 128],
+                'layer_dims': [128*5*5, 1024, 128]
+                },
+                
+        'Qnet_config': {
+                'class_name': 'QNet',
                 'last_layer_dim': 128, # see layer_dims in discriminator
                 },
         
@@ -54,7 +58,7 @@ config = {
                 },
                 
         'eval_config': {
-                'filepath': 'models/InfoGAN_MNIST_A1/infogan_model.pt',
+                'filepath': 'models/InfoGAN_MNIST/infogan_model.pt',
                 'load_checkpoint': False,
                 'n_test_samples': 25,
                 'n_repeats': 5
