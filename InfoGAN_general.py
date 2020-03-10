@@ -475,6 +475,7 @@ class InfoGAN(nn.Module):
             
             epoch_loss = np.zeros(4)
             epochs_d_norms = []
+            epochs_g_norms = []
             for i, x in enumerate(train_dataloader):
                 
                 # Ground truths
@@ -556,6 +557,8 @@ class InfoGAN(nn.Module):
                 g_loss += i_loss       
                 g_loss.backward()
                 self.optimiser_G.step()
+                b_g_norms = self.get_gradients(self.generator)
+                epochs_g_norms.append(b_g_norms)
 #                print('Generator gradients:')
 #                self.get_gradients(self.generator)
 
@@ -568,6 +571,7 @@ class InfoGAN(nn.Module):
             # ------------------------ #      
             epoch_loss /= len(train_dataloader)
             print("Epoch D Norm mean: ", np.mean(epochs_d_norms, axis=0))
+            print("Epoch G Norm mean: ", np.mean(epochs_g_norms, axis=0))
             print(
                 "[Epoch %d/%d]\n\t[D loss: %f] [G loss: %f] [info loss: %f]"
                 % (self.current_epoch, self.epochs, epoch_loss[0], 
