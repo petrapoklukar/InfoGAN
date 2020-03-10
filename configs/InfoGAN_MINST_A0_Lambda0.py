@@ -15,7 +15,7 @@ config = {
                 },
         
         'discriminator_config': {
-                'class_name': 'ConvolutionalDiscriminator',
+                'class_name': 'ConvolutionalDiscriminator_withoutQNet',
                 'channel_dims': [1, 64, 128],
                 'layer_dims': [128*5*5, 1024, 128]
                 },
