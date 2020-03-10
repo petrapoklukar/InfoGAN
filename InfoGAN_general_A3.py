@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Nov 21 14:21:00 2019
+Created on Mon Mar  9 12:06:25 2020
 
 @author: petrapoklukar
 
@@ -58,6 +58,7 @@ class InfoGAN(nn.Module):
         torch.manual_seed(train_config['random_seed'])
         np.random.seed(train_config['random_seed'])
         self.monitor_generator = 1
+        self.discriminator_update_step = 5
 
     # ---------------------- #
     # --- Init functions --- #
@@ -94,18 +95,7 @@ class InfoGAN(nn.Module):
                     'Discriminator class {0} not recognized'.format(
                             self.config['discriminator_config']['class_name']))
     
-    def init_Qnet(self):
-        """Initialises the q network."""
-        try:
-            class_ = getattr(InfoGAN_models, self.config['Qnet_config']['class_name'])
-            self.Qnet = class_(self.config['Qnet_config'], self.data_config).to(self.device)
-            print(' *- Initialised QNet: ', self.config['Qnet_config']['class_name'])
-        except: 
-            raise NotImplementedError(
-                    'QNet class {0} not recognized'.format(
-                            self.config['Qnet_config']['class_name']))
-    
-            
+                
     def init_weights(self, m):
         # TODO: tune this
         """Custom weight init"""
@@ -129,7 +119,7 @@ class InfoGAN(nn.Module):
         if optim_type == 'Adam':
             # Generator & QNet optimiser
             self.optimiser_G = optim.Adam(
-                    list(self.generator.parameters()) + list(self.Qnet.parameters()) + list(self.discriminator.parameters()),
+                    self.generator.parameters(),
                     lr=optim_config['gen_lr'], 
                     betas=(optim_config['gen_b1'], optim_config['gen_b2']))
             print(' *- Initialised generator optimiser: Adam')
@@ -170,7 +160,6 @@ class InfoGAN(nn.Module):
         self.fixed_z_noise = z_noise
         self.fixed_dis_noise = dis_noise
         self.fixed_con_noise = con_noise
-        
 
     # ---------------------------- #
     # --- Monitoring functions --- #
@@ -185,7 +174,6 @@ class InfoGAN(nn.Module):
                         name, torch.mean(param.grad), param_norm))        
 #        total_norm = total_norm ** (1. / 2)
 #        print('===\ngradients:{}'.format(total_norm))        
-        
         
     def count_parameters(self, model):
         """Counts the total number of trainable parameters in the model."""
@@ -208,10 +196,6 @@ class InfoGAN(nn.Module):
         num_gparameters = self.count_parameters(self.generator) 
         print_trainable_param(self.generator, num_gparameters)
         self.config['generator_config']['n_model_params'] = num_gparameters
-
-        num_iparameters = self.count_parameters(self.Qnet) 
-        print_trainable_param(self.Qnet, num_iparameters)
-        self.config['Qnet_config']['n_model_params'] = num_iparameters
 
     def plot_snapshot_loss(self):
         """
@@ -433,10 +417,8 @@ class InfoGAN(nn.Module):
             # Initialise the models, weights and optimisers
             self.init_discriminator()
             self.init_generator()
-            self.init_Qnet()
             self.discriminator.apply(self.init_weights)
             self.generator.apply(self.init_weights)
-            self.Qnet.apply(self.init_weights)
             self.start_gen_epoch, self.gen_lr = self.gen_lr_schedule.pop(0)
             self.start_dis_epoch, self.dis_lr = self.dis_lr_schedule.pop(0)
             assert(self.start_gen_epoch == self.start_dis_epoch)
@@ -447,7 +429,6 @@ class InfoGAN(nn.Module):
             except:
                 self.gen_lr_update_epoch, self.new_gen_lr = self.start_epoch - 1, self.gen_lr
                 self.dis_lr_update_epoch, self.new_dis_lr = self.start_epoch - 1, self.dis_lr
-
 
             self.init_optimisers()
             self.epoch_losses = []
@@ -473,23 +454,21 @@ class InfoGAN(nn.Module):
             
             epoch_loss = np.zeros(4)
             for i, x in enumerate(train_dataloader):
-                
                 # Ground truths
                 batch_size = x.shape[0]
-
-#                x = x.view(batch_size, -1) # DEBUG 553 on yumidata
                 real_x = x.to(self.device)        
                 real_labels = torch.ones(batch_size, 1, device=self.device)
                 fake_labels = torch.zeros(batch_size, 1, device=self.device)
                 
 #                dinput_noise = torch.empty(real_x.size()).normal_(mean=0, std=0.1)
+                
                 # ------------------------------- #
                 # --- Train the Discriminator --- #
                 # ------------------------------- #
                 self.optimiser_D.zero_grad()
         
                 # Loss for real images
-                real_pred, _ = self.discriminator(real_x)                
+                real_pred, _, _, _ = self.discriminator(real_x)                
                 assert torch.sum(torch.isnan(real_pred)) == 0, real_pred
                 assert(real_pred >= 0.).all(), real_pred
                 assert(real_pred <= 1.).all(), real_pred
@@ -500,32 +479,16 @@ class InfoGAN(nn.Module):
                 z_noise, dis_noise, con_noise = self.noise(batch_size)
                 fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
                 assert torch.sum(torch.isnan(fake_x)) == 0, fake_x
-                fake_pred, _ = self.discriminator(fake_x)
+                fake_pred, _, _, _ = self.discriminator(fake_x)
                 assert(fake_pred >= 0.).all(), fake_pred
                 assert(fake_pred <= 1.).all(), fake_pred
                 d_fake_loss = self.gan_loss(fake_pred, fake_labels)
                 D_G_z1 = fake_pred.mean().item()
-                
-                # Total discriminator loss
-                d_loss = d_real_loss + d_fake_loss       
-                d_loss.backward()
-                self.optimiser_D.step()
-#                print('Discriminator gradients:')
-#                self.get_gradients(self.discriminator)
 
-                # ---------------------------------- #
-                # --- Train the Generator & QNet --- #
-                # ---------------------------------- #
-                self.optimiser_G.zero_grad()
-        
-                # - THE USUAL GENERATOR LOSS        
-                # Loss measures generator's ability to fool the discriminator
-                # Push fake samples through the update discriminator
-                fake_pred, fake_features = self.discriminator(fake_x)
-                g_loss = self.gan_loss(fake_pred, real_labels)
-                D_G_z2 = fake_pred.mean().item()
-        
-                # - INFORMATION LOSS
+                
+                # Note: discriminator and Q share the weights so we need
+                # to optimise for the info loss as optimiser_D carries these parameters 
+                
                 # Sampled ground truth labels, see eq 5 in the paper
                 sampled_labels = np.random.randint(0, self.cat_c_dim, batch_size)
                 gt_labels = torch.LongTensor(sampled_labels).to(self.device)
@@ -536,16 +499,37 @@ class InfoGAN(nn.Module):
         
                 # Push it through QNet
                 gen_x = self.generator((z_noise, dis_noise, con_noise))
-                _, gen_features = self.discriminator(gen_x) 
-                pred_dis_code, pred_con_mean, pred_con_logvar = self.Qnet(gen_features)
+                _, pred_dis_code, pred_con_mean, pred_con_logvar = self.discriminator(gen_x) 
         
                 i_loss = self.lambda_cat * self.categorical_loss(pred_dis_code, gt_labels) + \
                     self.lambda_con * self.gaussian_loss(con_noise, pred_con_mean, pred_con_logvar)
                 
+                # Total discriminator loss
+                d_loss = d_real_loss + d_fake_loss + i_loss  
+                
+#                if i % self.discriminator_update_step == 0:
+#                    print('updating', i, self.discriminator_update_step, i % self.discriminator_update_step)
+                d_loss.backward(retain_graph=True)
+                self.optimiser_D.step()
+                print('\n\n\nDiscriminator gradients:')
+                self.get_gradients(self.discriminator)
+
+                # --------------------------- #
+                # --- Train the Generator --- #
+                # --------------------------- #
+                self.optimiser_G.zero_grad()
+        
+                # - THE USUAL GENERATOR LOSS        
+                # Loss measures generator's ability to fool the discriminator
+                # Push fake samples through the update discriminator
+                fake_pred, _, _, _ = self.discriminator(fake_x)
+                g_loss = self.gan_loss(fake_pred, real_labels)
+                D_G_z2 = fake_pred.mean().item()
+                
                 g_loss += i_loss                 
                 g_loss.backward()
                 self.optimiser_G.step()
-#                print('Generator gradients:')
+#                print('\n\n\nGenerator gradients:')
 #                self.get_gradients(self.generator)
 
 #                d_loss += i_loss
@@ -572,28 +556,29 @@ class InfoGAN(nn.Module):
             self.save_checkpoint(epoch_loss)
             
             if (self.current_epoch + 1) % self.snapshot == 0:
+    
                 # Save the checkpoint & logs, plot snapshot losses
                 self.save_checkpoint(epoch_loss, keep=True)
                 self.save_logs()
 
                 # Plot snapshot losses
                 self.plot_snapshot_loss()
-                
-                # Plot images generated from random noise
-#                z_noise, dis_noise, con_noise = self.noise(100)
-                
+            
             if (self.current_epoch + 1) % self.monitor_generator == 0:
+                # Plot images generated from fixed noise
                 gen_x = self.generator((self.fixed_z_noise, self.fixed_dis_noise, 
                                         self.fixed_con_noise)) 
                 gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
-                
-#                plt.figure(1)
-#                plt.imshow(gen_x_plotrescale[0].squeeze().detach())
-#                plt.savefig('FIND')
-                
                 filename = 'genImages' + str(self.current_epoch)
                 self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=100)
                 
+#                # Plot images generated from random noise
+#                z_noise, dis_noise, con_noise = self.noise(25)
+#                gen_x = self.generator((z_noise, dis_noise, con_noise))
+#                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
+#                filename = 'genImages' + str(self.current_epoch)
+#                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=25)
+#                
 #                # Plot images generated from the first discrete code
 #                z_noise, dis_noise, con_noise = self.noise(25, batch_cat_c_dim=0)
 #                gen_x = self.generator((z_noise, dis_noise, con_noise))
@@ -609,8 +594,7 @@ class InfoGAN(nn.Module):
         self.eval()
         torch.save({
                 'discriminator': self.discriminator.state_dict(), 
-                'generator': self.generator.state_dict(), 
-                'Qnet': self.Qnet.state_dict()}, 
+                'generator': self.generator.state_dict()}, 
                 self.model_path)       
         self.save_logs()
         
@@ -651,7 +635,6 @@ class InfoGAN(nn.Module):
                 
                 'discriminator_state_dict': self.discriminator.state_dict(),
                 'generator_state_dict': self.generator.state_dict(),
-                'Qnet_state_dict': self.Qnet.state_dict(),                
             
                 'optimiser_D_state_dict': self.optimiser_D.state_dict(),
                 'optimiser_G_state_dict': self.optimiser_G.state_dict(),
@@ -691,7 +674,6 @@ class InfoGAN(nn.Module):
         
         self.discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
         self.generator.load_state_dict(checkpoint['generator_state_dict'])
-        self.Qnet.load_state_dict(checkpoint['Qnet_state_dict'])
         
         self.gen_lr = checkpoint['current_gen_lr']
         self.gen_lr_update_epoch = checkpoint['gen_lr_update_epoch']
@@ -756,17 +738,6 @@ class InfoGAN(nn.Module):
             print(' *- Loaded checkpoint.')
         else:
             self.generator.load_state_dict(g_model)
-
-        # Load the QNet            
-        Qnet_config = self.config['Qnet_config']
-        Qnet = getattr(InfoGAN_models, Qnet_config['class_name'])
-        self.Qnet = Qnet(Qnet_config, data_config).to(self.device)
-        Qnet_model = model_dict['Qnet']
-        if eval_config['load_checkpoint']:
-            self.Qnet.load_state_dict(Qnet_model['model_state_dict'])
-            print(' *- Loaded checkpoint.')
-        else:
-            self.Qnet.load_state_dict(Qnet_model)
         
         self.eval()
         assert(not self.generator.training)
@@ -787,11 +758,7 @@ if __name__ == '__main__':
             'discriminator_config': {
                     'class_name': 'ConvolutionalDiscriminator',
                     'channel_dims': [1, 64, 128],
-                    'layer_dims': [128*5*5, 1024, 128]
-                    },
-                    
-            'Qnet_config': {
-                    'class_name': 'QNet',
+                    'layer_dims': [128*5*5, 1024, 128],
                     'last_layer_dim': 128, # see layer_dims in discriminator
                     },
             

@@ -8,7 +8,7 @@ RUNS_PATH="${SOURCE_PATH}/slurm_logs"
 SBATCH_OR_CAT=sbatch
 
 
-for config in "InfoGAN_MINST_A0" "InfoGAN_MINST_A0_Lambda0"; do
+for config in "InfoGAN_MINST_A0"; do
 echo $config
    
 "${SBATCH_OR_CAT}" << HERE
