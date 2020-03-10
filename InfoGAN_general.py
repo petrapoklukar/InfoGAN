@@ -177,13 +177,14 @@ class InfoGAN(nn.Module):
     # --- Monitoring functions --- #
     # ---------------------------- #    
     def get_gradients(self, model):
-        total_norm = 0
+        total_norm = []
         for name, param in model.named_parameters():
             if param.requires_grad:
                 param_norm = param.grad.data.norm(2).item()
-                total_norm += param_norm ** 2
-                print('===\ngradient:{}\n {}\n {}'.format(
-                        name, torch.mean(param.grad), param_norm))        
+                total_norm.append(round(param_norm, 3))
+        print(total_norm)
+#                print('===\ngradient:{}\n {}\n {}'.format(
+#                        name, torch.mean(param.grad), param_norm))        
 #        total_norm = total_norm ** (1. / 2)
 #        print('===\ngradients:{}'.format(total_norm))        
         
@@ -513,8 +514,8 @@ class InfoGAN(nn.Module):
 #                if i % self.discriminator_update_step == 0:
                 d_loss.backward()
                 self.optimiser_D.step()
-#                print('Discriminator gradients:')
-#                self.get_gradients(self.discriminator)
+                print('Discriminator gradients:')
+                self.get_gradients(self.discriminator)
 
 
                 # ---------------------------------- #
