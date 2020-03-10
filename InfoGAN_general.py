@@ -182,7 +182,7 @@ class InfoGAN(nn.Module):
             if param.requires_grad:
                 param_norm = param.grad.data.norm(2).item()
                 total_norm.append(round(param_norm, 3))
-        print(total_norm)
+        return total_norm
 #                print('===\ngradient:{}\n {}\n {}'.format(
 #                        name, torch.mean(param.grad), param_norm))        
 #        total_norm = total_norm ** (1. / 2)
@@ -474,6 +474,7 @@ class InfoGAN(nn.Module):
             assert(self.generator.training)
             
             epoch_loss = np.zeros(4)
+            epochs_d_norms = []
             for i, x in enumerate(train_dataloader):
                 
                 # Ground truths
@@ -515,8 +516,8 @@ class InfoGAN(nn.Module):
                 d_loss.backward()
                 self.optimiser_D.step()
                 print('Discriminator gradients:')
-                self.get_gradients(self.discriminator)
-
+                b_d_norms = self.get_gradients(self.discriminator)
+                epochs_d_norms.append(b_d_norms)
 
                 # ---------------------------------- #
                 # --- Train the Generator & QNet --- #
@@ -566,6 +567,7 @@ class InfoGAN(nn.Module):
             # --- Log the training --- #
             # ------------------------ #      
             epoch_loss /= len(train_dataloader)
+            print("Epoch D Norm mean: ", np.mean(epochs_d_norms, axis=0))
             print(
                 "[Epoch %d/%d]\n\t[D loss: %f] [G loss: %f] [info loss: %f]"
                 % (self.current_epoch, self.epochs, epoch_loss[0], 
