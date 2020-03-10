@@ -515,7 +515,7 @@ class InfoGAN(nn.Module):
 #                if i % self.discriminator_update_step == 0:
                 d_loss.backward()
                 self.optimiser_D.step()
-                print('Discriminator gradients:')
+#                print('Discriminator gradients:')
                 b_d_norms = self.get_gradients(self.discriminator)
                 epochs_d_norms.append(b_d_norms)
 
