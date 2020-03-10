@@ -484,37 +484,7 @@ class InfoGAN(nn.Module):
                 fake_labels = torch.zeros(batch_size, 1, device=self.device)
                 
 #                dinput_noise = torch.empty(real_x.size()).normal_(mean=0, std=0.1)
-                # ------------------------------- #
-                # --- Train the Discriminator --- #
-                # ------------------------------- #
-                self.optimiser_D.zero_grad()
-        
-                # Loss for real images
-                real_pred, _ = self.discriminator(real_x)                
-                assert torch.sum(torch.isnan(real_pred)) == 0, real_pred
-                assert(real_pred >= 0.).all(), real_pred
-                assert(real_pred <= 1.).all(), real_pred
-                d_real_loss = self.gan_loss(real_pred, real_labels)
-                D_x = real_pred.mean().item()
                 
-                # Loss for fake images
-                z_noise, dis_noise, con_noise = self.noise(batch_size)
-                fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
-                assert torch.sum(torch.isnan(fake_x)) == 0, fake_x
-                fake_pred, _ = self.discriminator(fake_x)
-                assert(fake_pred >= 0.).all(), fake_pred
-                assert(fake_pred <= 1.).all(), fake_pred
-                d_fake_loss = self.gan_loss(fake_pred, fake_labels)
-                D_G_z1 = fake_pred.mean().item()
-                
-                # Total discriminator loss
-                d_loss = d_real_loss + d_fake_loss       
-                
-#                if i % self.discriminator_update_step == 0:
-                d_loss.backward()
-                self.optimiser_D.step()
-#                print('Discriminator gradients:')
-#                self.get_gradients(self.discriminator)
 
                 # ---------------------------------- #
                 # --- Train the Generator & QNet --- #
@@ -552,10 +522,39 @@ class InfoGAN(nn.Module):
 #                print('Generator gradients:')
 #                self.get_gradients(self.generator)
 
-#                d_loss += i_loss
-#                d_loss.backward()
-#                self.optimiser_D.step()
-#                print(d_loss, g_loss)
+
+                # ------------------------------- #
+                # --- Train the Discriminator --- #
+                # ------------------------------- #
+                self.optimiser_D.zero_grad()
+        
+                # Loss for real images
+                real_pred, _ = self.discriminator(real_x)                
+                assert torch.sum(torch.isnan(real_pred)) == 0, real_pred
+                assert(real_pred >= 0.).all(), real_pred
+                assert(real_pred <= 1.).all(), real_pred
+                d_real_loss = self.gan_loss(real_pred, real_labels)
+                D_x = real_pred.mean().item()
+                
+                # Loss for fake images
+                z_noise, dis_noise, con_noise = self.noise(batch_size)
+                fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
+                assert torch.sum(torch.isnan(fake_x)) == 0, fake_x
+                fake_pred, _ = self.discriminator(fake_x)
+                assert(fake_pred >= 0.).all(), fake_pred
+                assert(fake_pred <= 1.).all(), fake_pred
+                d_fake_loss = self.gan_loss(fake_pred, fake_labels)
+                D_G_z1 = fake_pred.mean().item()
+                
+                # Total discriminator loss
+                d_loss = d_real_loss + d_fake_loss       
+                
+#                if i % self.discriminator_update_step == 0:
+                d_loss.backward()
+                self.optimiser_D.step()
+#                print('Discriminator gradients:')
+#                self.get_gradients(self.discriminator)
+
                 epoch_loss += self.format_loss([d_loss, g_loss, i_loss])
         
             # ------------------------ #
