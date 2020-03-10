@@ -495,8 +495,7 @@ class InfoGAN(nn.Module):
                 # Loss measures generator's ability to fool the discriminator
                 # Push fake samples through the update discriminator
                 # Sample noise, labels and code as generator input
-                z_noise, dis_noise, con_noise = self.noise(
-                        batch_size, batch_cat_c_dim=sampled_labels)
+                z_noise, dis_noise, con_noise = self.noise(batch_size)
                 fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
 
                 fake_pred, fake_features = self.discriminator(fake_x)
