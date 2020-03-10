@@ -494,6 +494,11 @@ class InfoGAN(nn.Module):
                 # - THE USUAL GENERATOR LOSS        
                 # Loss measures generator's ability to fool the discriminator
                 # Push fake samples through the update discriminator
+                # Sample noise, labels and code as generator input
+                z_noise, dis_noise, con_noise = self.noise(
+                        batch_size, batch_cat_c_dim=sampled_labels)
+                fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
+
                 fake_pred, fake_features = self.discriminator(fake_x)
                 g_loss = self.gan_loss(fake_pred, real_labels)
                 D_G_z2 = fake_pred.mean().item()
