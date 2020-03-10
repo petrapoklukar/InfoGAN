@@ -477,14 +477,14 @@ class InfoGAN(nn.Module):
                 real_labels = torch.ones(batch_size, 1, device=self.device)
                 fake_labels = torch.zeros(batch_size, 1, device=self.device)
                 
-                dinput_noise = torch.empty(real_x.size()).normal_(mean=0, std=0.1)
+#                dinput_noise = torch.empty(real_x.size()).normal_(mean=0, std=0.1)
                 # ------------------------------- #
                 # --- Train the Discriminator --- #
                 # ------------------------------- #
                 self.optimiser_D.zero_grad()
         
                 # Loss for real images
-                real_pred, _ = self.discriminator(real_x + dinput_noise)                
+                real_pred, _ = self.discriminator(real_x)                
                 assert torch.sum(torch.isnan(real_pred)) == 0, real_pred
                 assert(real_pred >= 0.).all(), real_pred
                 assert(real_pred <= 1.).all(), real_pred
@@ -495,7 +495,7 @@ class InfoGAN(nn.Module):
                 z_noise, dis_noise, con_noise = self.noise(batch_size)
                 fake_x = self.generator((z_noise, dis_noise, con_noise)).detach()
                 assert torch.sum(torch.isnan(fake_x)) == 0, fake_x
-                fake_pred, _ = self.discriminator(fake_x + dinput_noise)
+                fake_pred, _ = self.discriminator(fake_x)
                 assert(fake_pred >= 0.).all(), fake_pred
                 assert(fake_pred <= 1.).all(), fake_pred
                 d_fake_loss = self.gan_loss(fake_pred, fake_labels)
@@ -516,7 +516,7 @@ class InfoGAN(nn.Module):
                 # - THE USUAL GENERATOR LOSS        
                 # Loss measures generator's ability to fool the discriminator
                 # Push fake samples through the update discriminator
-                fake_pred, fake_features = self.discriminator(fake_x + dinput_noise)
+                fake_pred, fake_features = self.discriminator(fake_x)
                 g_loss = self.gan_loss(fake_pred, real_labels)
                 D_G_z2 = fake_pred.mean().item()
         
@@ -531,7 +531,7 @@ class InfoGAN(nn.Module):
         
                 # Push it through QNet
                 gen_x = self.generator((z_noise, dis_noise, con_noise))
-                _, gen_features = self.discriminator(gen_x + dinput_noise) 
+                _, gen_features = self.discriminator(gen_x) 
                 pred_dis_code, pred_con_mean, pred_con_logvar = self.Qnet(gen_features)
         
                 i_loss = self.lambda_cat * self.categorical_loss(pred_dis_code, gt_labels) + \
