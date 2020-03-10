@@ -171,7 +171,7 @@ class InfoGAN(nn.Module):
         self.fixed_z_noise = z_noise
         self.fixed_dis_noise = dis_noise
         self.fixed_con_noise = con_noise
-        
+    
 
     # ---------------------------- #
     # --- Monitoring functions --- #
@@ -188,6 +188,9 @@ class InfoGAN(nn.Module):
 #        total_norm = total_norm ** (1. / 2)
 #        print('===\ngradients:{}'.format(total_norm))        
         
+    def gradClamp(parameters, clip=5):
+        for p in parameters:
+            p.grad.data.clamp_(max=clip)
         
     def count_parameters(self, model):
         """Counts the total number of trainable parameters in the model."""
@@ -515,6 +518,8 @@ class InfoGAN(nn.Module):
                 
 #                if i % self.discriminator_update_step == 0:
                 d_loss.backward()
+                torch.nn.utils.clip_grad_norm(
+                        self.discriminator.parameters(), 5)
                 self.optimiser_D.step()
 #                print('Discriminator gradients:')
                 b_d_norms = self.get_gradients(self.discriminator)
@@ -556,6 +561,8 @@ class InfoGAN(nn.Module):
 #                if i % self.discriminator_update_step == 0:
                 g_loss += i_loss       
                 g_loss.backward()
+                torch.nn.utils.clip_grad_norm(
+                        self.generator.parameters(), 5)
                 self.optimiser_G.step()
                 b_g_norms = self.get_gradients(self.generator)
                 epochs_g_norms.append(b_g_norms)
