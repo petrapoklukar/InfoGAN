@@ -181,7 +181,7 @@ class InfoGAN(nn.Module):
         for name, param in model.named_parameters():
             if param.requires_grad:
                 param_norm = param.grad.data.norm(2).item()
-                total_norm.append(round(param_norm, 3))
+                total_norm.append(np.around(param_norm, decimals=3))
         return total_norm
 #                print('===\ngradient:{}\n {}\n {}'.format(
 #                        name, torch.mean(param.grad), param_norm))        
