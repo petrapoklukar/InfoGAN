@@ -562,7 +562,7 @@ class InfoGAN(nn.Module):
                 g_loss += i_loss       
                 g_loss.backward()
                 torch.nn.utils.clip_grad_norm(
-                        self.generator.parameters(), 5)
+                        self.generator.parameters(), 2)
                 self.optimiser_G.step()
                 b_g_norms = self.get_gradients(self.generator)
                 epochs_g_norms.append(b_g_norms)
