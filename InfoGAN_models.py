@@ -89,6 +89,20 @@ class QNet(nn.Module):
         return self.forward_pass(x)
 
 
+class DNet(nn.Module):
+    def __init__(self, dis_config):
+        super(DNet, self).__init__()
+        self.last_layer_dim = dis_config['last_layer_dim']
+        
+        # Output layers for discriminator
+        self.d_out = nn.Sequential(
+                nn.Linear(self.last_layer_dim, 1, bias=False),
+                nn.Sigmoid())
+
+    def forward(self, x):
+        return self.d_out(x)
+    
+        
 # ---------------------------------------- #
 # --- Linear Generator & Distriminator --- #
 # ---------------------------------------- #
@@ -301,6 +315,39 @@ class ConvolutionalDiscriminator_withoutQNet(nn.Module):
         out_lin = self.lin(out_conv) # Needed for QNet
         validity = self.d_out(out_lin) # Usual discriminator output
         return validity, out_lin 
+    
+
+class ConvolutionalSharedDandQ(nn.Module):
+    def __init__(self, model_config, data_config):
+        super(ConvolutionalSharedDandQ, self).__init__()
+        self.model_config = model_config
+
+        self.channel_dims = model_config['channel_dims']
+        self.layer_dims = model_config['layer_dims']
+
+        self.conv = nn.Sequential()
+        for i in range(len(self.channel_dims) - 1):
+            self.conv.add_module('conv2d' + str(i), nn.Conv2d(
+                    self.channel_dims[i], self.channel_dims[i+1], 4, stride=2,
+                    bias=False))
+            self.conv.add_module('lrelu' + str(i), nn.LeakyReLU(0.2, inplace=True))
+            if i > 0:
+                self.conv.add_module('bn' + str(i), nn.BatchNorm2d(self.channel_dims[i+1]))
+        
+        self.lin = nn.Sequential()
+        self.lin.add_module('conv_to_lin', ConvToLin())
+        for i in range(len(self.layer_dims) - 1):
+            self.lin.add_module('lin' + str(i), nn.Linear(
+                    self.layer_dims[i], self.layer_dims[i+1], bias=False))
+            self.lin.add_module('lrelu' + str(i), nn.LeakyReLU(0.2, inplace=True))
+            if i != len(self.layer_dims) - 2:
+                self.lin.add_module('bn' + str(i), nn.BatchNorm1d(self.layer_dims[i+1]))
+        
+    def forward(self, x):
+        out_conv = self.conv(x) 
+        out_lin = self.lin(out_conv) # Needed for QNet
+        return out_lin 
+
 
     
 # --------------------------------- #
