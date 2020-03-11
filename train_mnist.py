@@ -11,7 +11,7 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import InfoGAN_models
-import InfoGAN_general_A4 as model
+import InfoGAN_general_A5 as model
 
 import matplotlib
 matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
