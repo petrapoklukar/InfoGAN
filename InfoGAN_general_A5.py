@@ -152,7 +152,7 @@ class InfoGAN(nn.Module):
             
             # Q optimiser
             self.optimiser_Q = optim.Adam(
-                    list(self.sharedDandQ.parameters()) + list(self.Qnet.parameters()), 
+                    list(self.sharedDandQ.parameters()) + list(self.Qnet.parameters()) + list(self.generator.parameters()), 
                     lr=optim_config['dis_lr'], 
                     betas=(optim_config['dis_b1'], optim_config['dis_b2']))
             print(' *- Initialised Q optimiser: Adam')
