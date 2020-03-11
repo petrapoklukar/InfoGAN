@@ -518,8 +518,8 @@ class InfoGAN(nn.Module):
                 
 #                if i % self.discriminator_update_step == 0:
                 d_loss.backward()
-                torch.nn.utils.clip_grad_norm(
-                        self.discriminator.parameters(), 5)
+                torch.nn.utils.clip_grad_norm_(
+                        self.discriminator.parameters(), 2)
                 self.optimiser_D.step()
 #                print('Discriminator gradients:')
                 b_d_norms = self.get_gradients(self.discriminator)
@@ -561,7 +561,7 @@ class InfoGAN(nn.Module):
 #                if i % self.discriminator_update_step == 0:
                 g_loss += i_loss       
                 g_loss.backward()
-                torch.nn.utils.clip_grad_norm(
+                torch.nn.utils.clip_grad_norm_(
                         self.generator.parameters(), 2)
                 self.optimiser_G.step()
                 b_g_norms = self.get_gradients(self.generator)
