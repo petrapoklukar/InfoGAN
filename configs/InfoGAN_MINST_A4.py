@@ -63,7 +63,7 @@ config = {
                 },
                 
         'eval_config': {
-                'filepath': 'models/InfoGAN_MNIST/infogan_model.pt',
+                'filepath': 'models/{0}/infogan_model.pt',
                 'load_checkpoint': False,
                 'n_test_samples': 25,
                 'n_repeats': 5
