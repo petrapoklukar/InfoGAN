@@ -563,8 +563,7 @@ class InfoGAN(nn.Module):
                     self.lambda_con * self.gaussian_loss(con_noise, q_con_mean, q_con_logvar)
                 
                 # Total discriminator loss. 
-                # - Note it's - i_loss because we turned max to min
-                total_d_loss = d_real_loss + d_fake_loss - D_i_loss 
+                total_d_loss = d_real_loss + d_fake_loss + D_i_loss 
                 total_d_loss.backward()
                 if self.grad_clip:
                     torch.nn.utils.clip_grad_norm_(
