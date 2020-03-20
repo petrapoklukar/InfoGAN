@@ -18,7 +18,7 @@ config = {
                 },
         
         'Snet_config': {
-                'class_name': 'FullyConnectedSNet_Architecture2',
+                'class_name': 'FullyConnectedSNet',
                 'linear_dims': [512, 256],
                 'dropout': 0,
                 'image_channels': 1,

@@ -5,7 +5,6 @@ Created on Thu Nov 21 09:17:10 2019
 
 @author: petrapoklukar
 
-Base implementation thanks to https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/infogan/infogan.py
 """
 
 import torch.nn as nn
@@ -13,101 +12,10 @@ import torch
 import math
 import numpy as np
 
-# --------------------------------------------------------------- #
-# --- To keep track of the dimensions of convolutional layers --- #
-# --------------------------------------------------------------- #
-class TempPrintShape(nn.Module):
-    def __init__(self, message):
-        super(TempPrintShape, self).__init__()
-        self.message = message
-        
-    def forward(self, feat):
-        print(self.message, feat.shape)
-        return feat 
-    
-    
-class LinToConv(nn.Module):
-    def __init__(self, input_dim, n_channels):
-        super(LinToConv, self).__init__()
-        self.n_channels = n_channels
-        self.width = int(np.sqrt(input_dim / n_channels))
-
-    def forward(self, feat):
-        feat = feat.view((feat.shape[0], self.n_channels, self.width, self.width))
-        return feat
-
-
-class ConvToLin(nn.Module):
-    def __init__(self): 
-        super(ConvToLin, self).__init__()
-
-    def forward(self, feat):
-        batch, channels, width, height = feat.shape
-        feat = feat.view((batch, channels * width * height)) 
-        return feat
-
-# ------------ #
-# --- QNet --- #
-# ------------ #
-class QNet(nn.Module):
-    def __init__(self, model_config, data_config):
-        super(QNet, self).__init__()
-        self.last_layer_dim = model_config['last_layer_dim']
-        self.n_categorical_codes = data_config['structured_cat_dim']
-        self.n_continuous_codes = data_config['structured_con_dim']
-        self.forward_pass = self.continous_forward
-        
-        # Model structured continuous code as Gaussian
-        self.con_layer_mean = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
-                                        bias=False)
-        self.con_layer_logvar = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
-                                          bias=False)
-        
-        if self.n_categorical_codes > 0:
-            # Structured categorical code
-            self.forward_pass = self.full_forward
-            print('forward_pass set to full.')
-            self.cat_layer = nn.Sequential(
-                    nn.Linear(self.last_layer_dim, self.n_categorical_codes,
-                              bias=False), 
-                    nn.Softmax(dim=-1))
-    
-    def continous_forward(self, x):
-        """Forward pass without structured categorical code"""
-        con_code_mean = self.con_layer_mean(x) # Structured continuous code
-        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
-        return con_code_mean, con_code_logvar
-    
-    def full_forward(self, x):
-        """Forward pass with structured categorical and continuous codes"""
-        cat_code = self.cat_layer(x) # Structured categorical code
-        con_code_mean = self.con_layer_mean(x) # Structured continuous code
-        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
-        return cat_code, con_code_mean, con_code_logvar
-
-    def forward(self, x):
-        return self.forward_pass(x)
-
-
-class DNet(nn.Module):
-    def __init__(self, dis_config):
-        super(DNet, self).__init__()
-        self.last_layer_dim = dis_config['last_layer_dim']
-        
-        # Output layers for discriminator
-        self.d_out = nn.Sequential(
-                nn.Linear(self.last_layer_dim, 1, bias=False),
-                nn.Sigmoid())
-
-    def forward(self, x):
-        return self.d_out(x)
-    
         
 # ---------------------------------------- #
 # --- Linear Generator & Distriminator --- #
 # ---------------------------------------- #
-    
-# From the tests on VanillaGAN
 class FullyConnectedGNet(nn.Module):
     def __init__(self, config):
         super(FullyConnectedGNet, self).__init__()
@@ -143,9 +51,9 @@ class FullyConnectedGNet(nn.Module):
         return out
     
     
-class FullyConnectedSNet_Architecture2(nn.Module):
+class FullyConnectedSNet(nn.Module):
     def __init__(self, config):
-        super(FullyConnectedSNet_Architecture2, self).__init__()
+        super(FullyConnectedSNet, self).__init__()
         self.linear_dims = config['linear_dims'] # [512, 256]
         self.image_size = config['image_size']
         self.image_channels = config['image_channels']        
@@ -280,6 +188,105 @@ class FullyConnectedDiscriminator_archived(nn.Module):
         out = self.discriminator(x) # Needed for QNet
         validity = self.d_out(out) # Usual discriminator output
         return validity, out
+    
+    
+    
+    
+#---------------------------------- #
+# --------------------------------- #
+# --- ARCHIVED BELOW THIS POINT --- #
+#---------------------------------- #
+#---------------------------------- #
+        
+# --------------------------------------------------------------- #
+# --- To keep track of the dimensions of convolutional layers --- #
+# --------------------------------------------------------------- #
+class TempPrintShape(nn.Module):
+    def __init__(self, message):
+        super(TempPrintShape, self).__init__()
+        self.message = message
+        
+    def forward(self, feat):
+        print(self.message, feat.shape)
+        return feat 
+    
+    
+class LinToConv(nn.Module):
+    def __init__(self, input_dim, n_channels):
+        super(LinToConv, self).__init__()
+        self.n_channels = n_channels
+        self.width = int(np.sqrt(input_dim / n_channels))
+
+    def forward(self, feat):
+        feat = feat.view((feat.shape[0], self.n_channels, self.width, self.width))
+        return feat
+
+
+class ConvToLin(nn.Module):
+    def __init__(self): 
+        super(ConvToLin, self).__init__()
+
+    def forward(self, feat):
+        batch, channels, width, height = feat.shape
+        feat = feat.view((batch, channels * width * height)) 
+        return feat
+
+# ------------ #
+# --- QNet --- #
+# ------------ #
+class QNet(nn.Module):
+    def __init__(self, model_config, data_config):
+        super(QNet, self).__init__()
+        self.last_layer_dim = model_config['last_layer_dim']
+        self.n_categorical_codes = data_config['structured_cat_dim']
+        self.n_continuous_codes = data_config['structured_con_dim']
+        self.forward_pass = self.continous_forward
+        
+        # Model structured continuous code as Gaussian
+        self.con_layer_mean = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
+                                        bias=False)
+        self.con_layer_logvar = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
+                                          bias=False)
+        
+        if self.n_categorical_codes > 0:
+            # Structured categorical code
+            self.forward_pass = self.full_forward
+            print('forward_pass set to full.')
+            self.cat_layer = nn.Sequential(
+                    nn.Linear(self.last_layer_dim, self.n_categorical_codes,
+                              bias=False), 
+                    nn.Softmax(dim=-1))
+    
+    def continous_forward(self, x):
+        """Forward pass without structured categorical code"""
+        con_code_mean = self.con_layer_mean(x) # Structured continuous code
+        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
+        return con_code_mean, con_code_logvar
+    
+    def full_forward(self, x):
+        """Forward pass with structured categorical and continuous codes"""
+        cat_code = self.cat_layer(x) # Structured categorical code
+        con_code_mean = self.con_layer_mean(x) # Structured continuous code
+        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
+        return cat_code, con_code_mean, con_code_logvar
+
+    def forward(self, x):
+        return self.forward_pass(x)
+
+
+class DNet(nn.Module):
+    def __init__(self, dis_config):
+        super(DNet, self).__init__()
+        self.last_layer_dim = dis_config['last_layer_dim']
+        
+        # Output layers for discriminator
+        self.d_out = nn.Sequential(
+                nn.Linear(self.last_layer_dim, 1, bias=False),
+                nn.Sigmoid())
+
+    def forward(self, x):
+        return self.d_out(x)
+    
 # ----------------------------------------------- #
 # --- Convolutional Generator & Distriminator --- #
 # ----------------------------------------------- #
