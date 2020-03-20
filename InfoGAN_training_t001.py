@@ -154,8 +154,7 @@ class InfoGAN(nn.Module):
         optim_type = optim_config['optim_type']
         if optim_type == 'Adam':
             # Generator optimiser
-            G_params = list(self.Gnet.parameters()) + list(self.Snet.parameters()) \
-                + list(self.Qnet.parameters())
+            G_params = list(self.Gnet.parameters()) + list(self.Qnet.parameters())
             self.optimiser_G = optim.Adam(
                     G_params,
                     lr=self.gen_lr, 
@@ -273,7 +272,7 @@ class InfoGAN(nn.Module):
         """Plots epochs vs discriminator and generator losses."""
         plt_data = np.stack(self.epoch_losses)
         plt_labels = ['total_d_loss', 'total_g_loss', 'd_real_loss', 
-                      'd_fake_loss', 'D_i_loss', 'g_loss', 'G_i_loss']
+                      'd_fake_loss', 'g_loss', 'G_i_loss']
         n_subplots = len(plt_labels)
         for i in range(n_subplots):
             plt.subplot(n_subplots,1,i+1)
@@ -299,7 +298,7 @@ class InfoGAN(nn.Module):
         fig2, ax2 = plt.subplots()
         ax2.plot(plt_data[:, 2], 'go-', linewidth=3, label=plt_labels[2])
         ax2.plot(plt_data[:, 3], 'bo-', linewidth=3, label=plt_labels[3])
-        ax2.plot(plt_data[:, 4], 'ro-', linewidth=3, label=plt_labels[4])
+#        ax2.plot(plt_data[:, 4], 'ro-', linewidth=3, label=plt_labels[4])
         ax2.legend()
         ax2.set_xlim(0, self.epochs)
         ax2.set(xlabel='# epochs', ylabel='loss', title='D_optim loss')
@@ -307,8 +306,8 @@ class InfoGAN(nn.Module):
         plt.close()
         
         fig3, ax3 = plt.subplots()
-        ax3.plot(plt_data[:, 5], 'go-', linewidth=3, label=plt_labels[5])
-        ax3.plot(plt_data[:, 6], 'bo-', linewidth=3, label=plt_labels[6])
+        ax3.plot(plt_data[:, 4], 'go-', linewidth=3, label=plt_labels[4])
+        ax3.plot(plt_data[:, 5], 'bo-', linewidth=3, label=plt_labels[5])
         ax3.legend()
         ax3.set_xlim(0, self.epochs)
         ax3.set(xlabel='# epochs', ylabel='loss', title='G_optim loss')
@@ -334,7 +333,7 @@ class InfoGAN(nn.Module):
         plot_data = [(self.D_dgrad_norms, 'D_Dnetgradients'), 
                      (self.D_sgrad_norms, 'D_Snetgradients'),
                      (self.G_ggrad_norms, 'G_Gnetgradients'),
-                     (self.G_sgrad_norms, 'G_Snetgradients'),
+#                     (self.G_sgrad_norms, 'G_Snetgradients'),
                      (self.G_qgrad_norms, 'G_Qnetgradients')]
         
         for (model_grads, title) in plot_data:
@@ -355,10 +354,10 @@ class InfoGAN(nn.Module):
         
         # G optimisation total grads
         plt_G_gdata_total = np.array(self.G_ggrad_total_norm)
-        plt_G_sdata_total = np.array(self.G_sgrad_total_norm)
+#        plt_G_sdata_total = np.array(self.G_sgrad_total_norm)
         plt_G_qdata_total = np.array(self.G_qgrad_total_norm)
         plt.plot(plt_G_gdata_total, label='Total G_Gnet norms')
-        plt.plot(plt_G_sdata_total, label='Total G_Snet norms')
+#        plt.plot(plt_G_sdata_total, label='Total G_Snet norms')
         plt.plot(plt_G_qdata_total, label='Total G_Qnet norms')
         plt.ylabel('total_gradient_norm')
         plt.xlabel('# epochs')
@@ -477,11 +476,12 @@ class InfoGAN(nn.Module):
             self.init_optimisers()
             self.epoch_losses = []
             self.D_sgrad_norms, self.D_dgrad_norms = [], []
-            self.G_ggrad_norms, self.G_sgrad_norms, self.G_qgrad_norms = [], [], []
-
+            self.G_ggrad_norms, self.G_qgrad_norms = [], []
+#            self.G_sgrad_norms = []
+            
             self.D_sgrad_total_norm, self.D_dgrad_total_norm = [], []
-            self.G_ggrad_total_norm, self.G_sgrad_total_norm = [], []
-            self.G_qgrad_total_norm = []
+            self.G_ggrad_total_norm, self.G_qgrad_total_norm = [], []
+#            self.G_sgrad_total_norm = []
             
             print((' *- G_optimiser' + 
                    '    *- Learning rate: {0}\n' + 
@@ -506,11 +506,11 @@ class InfoGAN(nn.Module):
             self.Qnet.train()
             assert(self.Gnet.training)
             
-            epoch_loss = np.zeros(8)
+            epoch_loss = np.zeros(7)
             epochs_D_snet_norms = []
             epochs_D_dnet_norms = []
             epochs_G_gnet_norms = []
-            epochs_G_snet_norms = []
+#            epochs_G_snet_norms = []
             epochs_G_qnet_norms = []
             for i, x in enumerate(train_dataloader):
                 
@@ -546,24 +546,24 @@ class InfoGAN(nn.Module):
                 d_fake_loss = self.bce_loss(d_fake_x, zeros)
                 D_G_z1 = d_fake_x.mean().item()
                 
-                # Info loss for the shared weights in the Snet
-                # - Sampled ground truth labels, see eq 5 in the paper
-                sampled_labels = np.random.randint(0, self.cat_c_dim, batch_size)
-                gt_labels = torch.LongTensor(sampled_labels).to(self.device)
-        
-                # - Sample noise, labels and code as generator input
-                z_noise, cat_noise, con_noise = self.ginput_noise(
-                        batch_size, batch_cat_c_dim=sampled_labels)
-        
-                # - Push it through QNet
-                gen_x = self.Gnet((z_noise, cat_noise, con_noise))
-                q_cat_code, q_con_mean, q_con_logvar = self.q_forward(gen_x) 
-        
-                D_i_loss = self.lambda_cat * self.ce_loss(q_cat_code, gt_labels) + \
-                    self.lambda_con * self.gaussian_loss(con_noise, q_con_mean, q_con_logvar)
-                
+#                # Info loss for the shared weights in the Snet
+#                # - Sampled ground truth labels, see eq 5 in the paper
+#                sampled_labels = np.random.randint(0, self.cat_c_dim, batch_size)
+#                gt_labels = torch.LongTensor(sampled_labels).to(self.device)
+#        
+#                # - Sample noise, labels and code as generator input
+#                z_noise, cat_noise, con_noise = self.ginput_noise(
+#                        batch_size, batch_cat_c_dim=sampled_labels)
+#        
+#                # - Push it through QNet
+#                gen_x = self.Gnet((z_noise, cat_noise, con_noise))
+#                q_cat_code, q_con_mean, q_con_logvar = self.q_forward(gen_x) 
+#        
+#                D_i_loss = self.lambda_cat * self.ce_loss(q_cat_code, gt_labels) + \
+#                    self.lambda_con * self.gaussian_loss(con_noise, q_con_mean, q_con_logvar)
+#                
                 # Total discriminator loss. 
-                total_d_loss = d_real_loss + d_fake_loss + D_i_loss 
+                total_d_loss = d_real_loss + d_fake_loss #+ D_i_loss 
                 total_d_loss.backward()
                 if self.grad_clip:
                     torch.nn.utils.clip_grad_norm_(
@@ -618,8 +618,8 @@ class InfoGAN(nn.Module):
                 if self.grad_clip:
                     torch.nn.utils.clip_grad_norm_(
                             self.Gnet.parameters(), self.Gnet_G_grad_clip) 
-                    torch.nn.utils.clip_grad_norm_(
-                            self.Snet.parameters(), self.Snet_G_grad_clip) 
+#                    torch.nn.utils.clip_grad_norm_(
+#                            self.Snet.parameters(), self.Snet_G_grad_clip) 
                     torch.nn.utils.clip_grad_norm_(
                             self.Qnet.parameters(), self.Qnet_G_grad_clip) 
                 self.optimiser_G.step()
@@ -630,10 +630,10 @@ class InfoGAN(nn.Module):
                 b_G_gnet_norm_total = np.around(np.linalg.norm(np.array(b_gnet_norms)), 
                                               decimals=3)
                 
-                b_G_snet_norms = self.get_gradients(self.Snet)
-                epochs_G_snet_norms.append(b_G_snet_norms)
-                b_G_snet_norm_total = np.around(np.linalg.norm(np.array(b_G_snet_norms)), 
-                                                decimals=3)
+#                b_G_snet_norms = self.get_gradients(self.Snet)
+#                epochs_G_snet_norms.append(b_G_snet_norms)
+#                b_G_snet_norm_total = np.around(np.linalg.norm(np.array(b_G_snet_norms)), 
+#                                                decimals=3)
                 
                 b_qnet_norms = self.get_gradients(self.Qnet)
                 epochs_G_qnet_norms.append(b_qnet_norms)
@@ -642,7 +642,7 @@ class InfoGAN(nn.Module):
                 
                 epoch_loss += self.format_loss([
                         total_d_loss, total_g_loss, d_real_loss, d_fake_loss, 
-                        D_i_loss, g_loss, G_i_loss])
+                        g_loss, G_i_loss])
         
             # ------------------------ #
             # --- Log the training --- #
@@ -663,20 +663,20 @@ class InfoGAN(nn.Module):
             print("\t[D_optim_Snet_norm_mean]: ", np.mean(epochs_D_snet_norms, axis=0))
             print("\t[D_optim_Dnet_norm_mean]: ", np.mean(epochs_D_dnet_norms, axis=0))
             print("\t[G_optim_Gnet_norm_mean]: ", np.mean(epochs_G_gnet_norms, axis=0))
-            print("\t[G_optim_Snet_norm_mean]: ", np.mean(epochs_G_snet_norms, axis=0))
+#            print("\t[G_optim_Snet_norm_mean]: ", np.mean(epochs_G_snet_norms, axis=0))
             print("\t[G_optim_Qnet_norm_mean]: ", np.mean(epochs_G_qnet_norms, axis=0))
             
             self.epoch_losses.append(epoch_loss)
             self.D_sgrad_norms.append(np.mean(epochs_D_snet_norms, axis=0))
             self.D_dgrad_norms.append(np.mean(epochs_D_dnet_norms, axis=0))
             self.G_ggrad_norms.append(np.mean(epochs_G_gnet_norms, axis=0))
-            self.G_sgrad_norms.append(np.mean(epochs_G_snet_norms, axis=0))
+#            self.G_sgrad_norms.append(np.mean(epochs_G_snet_norms, axis=0))
             self.G_qgrad_norms.append(np.mean(epochs_G_qnet_norms, axis=0))
 
             self.D_sgrad_total_norm.append(b_D_snet_norm_total)
             self.D_dgrad_total_norm.append(b_D_dnet_norm_total)
             self.G_ggrad_total_norm.append(b_G_gnet_norm_total)
-            self.G_sgrad_total_norm.append(b_G_snet_norm_total)
+#            self.G_sgrad_total_norm.append(b_G_snet_norm_total)
             self.G_qgrad_total_norm.append(b_G_qnet_norm_total)
 
             self.plot_model_loss() 
@@ -733,11 +733,11 @@ class InfoGAN(nn.Module):
                     '*- Generator learning rate schedule: {0}\n'.format(self.init_gen_lr_schedule),
                     '*- Discriminator learning rate schedule: {0}\n'.format(self.init_dis_lr_schedule),
                     '*- Training epoch losses: (total_d_loss, total_g_loss, ' + 
-                    'd_real_loss, d_fake_loss, D_i_loss, g_loss, G_i_loss)\n'
+                    'd_real_loss, d_fake_loss, g_loss, G_i_loss)\n'
                     ])
             f.writelines(list(map(
-                    lambda t: '{0:>3} Epoch {8}: ({1:.2f}, {2:.2f}, {3:.2f}, {4:.2f}, {5:.2f}, {6:.2f}, {7:.2f})\n'.format(
-                            '', t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]), 
+                    lambda t: '{0:>3} Epoch {7}: ({1:.2f}, {2:.2f}, {3:.2f}, {4:.2f}, {5:.2f}, {6:.2f})\n'.format(
+                            '', t[0], t[1], t[2], t[3], t[4], t[5], t[6]), 
                     epoch_losses)))
         print(' *- Model saved.\n')
     
@@ -780,13 +780,13 @@ class InfoGAN(nn.Module):
                 'D_sgrad_norms': self.D_sgrad_norms,
                 'D_dgrad_norms': self.D_dgrad_norms,
                 'G_ggrad_norms': self.G_ggrad_norms,
-                'G_sgrad_norms': self.G_sgrad_norms,
+#                'G_sgrad_norms': self.G_sgrad_norms,
                 'G_qgrad_norms': self.G_qgrad_norms,
                 
                 'D_sgrad_total_norm': self.D_sgrad_total_norm, 
                 'D_dgrad_total_norm': self.D_dgrad_total_norm,
                 'G_ggrad_total_norm': self.G_ggrad_total_norm, 
-                'G_sgrad_total_norm': self.G_sgrad_total_norm,
+#                'G_sgrad_total_norm': self.G_sgrad_total_norm,
                 'G_qgrad_total_norm': self.G_qgrad_total_norm
                 }
         
@@ -823,13 +823,13 @@ class InfoGAN(nn.Module):
         self.D_sgrad_norms = checkpoint['D_sgrad_norms']
         self.D_dgrad_norms = checkpoint['D_dgrad_norms']
         self.G_ggrad_norms = checkpoint['G_ggrad_norms']
-        self.G_sgrad_norms = checkpoint['G_sgrad_norms']
+#        self.G_sgrad_norms = checkpoint['G_sgrad_norms']
         self.G_qgrad_norms = checkpoint['G_qgrad_norms']
                 
         self.D_sgrad_total_norm = checkpoint['D_sgrad_total_norm']
         self.D_dgrad_total_norm = checkpoint['D_dgrad_total_norm']
         self.G_ggrad_total_norm = checkpoint['G_ggrad_total_norm']
-        self.G_sgrad_total_norm = checkpoint['G_sgrad_total_norm']
+#        self.G_sgrad_total_norm = checkpoint['G_sgrad_total_norm']
         self.G_qgrad_total_norm = checkpoint['G_qgrad_total_norm']
         
         self.init_optimisers()
