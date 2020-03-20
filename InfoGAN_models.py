@@ -97,26 +97,40 @@ class FullyConnectedDNet(nn.Module):
 class FullyConnectedQNet(nn.Module):
     def __init__(self, model_config, data_config):
         super(FullyConnectedQNet, self).__init__()
+        self.layer_dims = model_config['layer_dims']
         self.last_layer_dim = model_config['last_layer_dim']
         self.n_categorical_codes = data_config['structured_cat_dim']
         self.n_continuous_codes = data_config['structured_con_dim']
         self.forward_pass = self.continous_forward
         self.bias = model_config['bias']
         
+        # In case of a bigger network
+        if self.layer_dims != None:
+            self.lin = nn.Sequential()
+            for i in range(len(self.layer_dims) - 1):    
+                self.lin.add_module(
+                        'lin' + str(i), 
+                        nn.Linear(self.layer_dims[i], self.layer_dims[i+1], 
+                        bias=self.bias))
+            self.last_layer_dim = self.layer_dims[-1]
+            self.forward_pass = self.full_forward_extended if self.n_categorical_codes > 0 else self.continous_forward_extended
+        
+        if self.n_categorical_codes > 0:
+            # Structured categorical code
+            self.forward_pass = self.full_forward if self.layer_dims == None else self.full_forward_extended
+            print('forward_pass set to full.')
+            # Note: no Softmax activation because it is included in the loss function
+            self.cat_layer = nn.Sequential(
+                    nn.Linear(self.last_layer_dim, self.n_categorical_codes,
+                              bias=self.bias))
+            
         # Model structured continuous code as Gaussian
         self.con_layer_mean = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
                                         bias=self.bias)
         self.con_layer_logvar = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
                                           bias=self.bias)
         
-        if self.n_categorical_codes > 0:
-            # Structured categorical code
-            self.forward_pass = self.full_forward
-            print('forward_pass set to full.')
-            self.cat_layer = nn.Sequential(
-                    nn.Linear(self.last_layer_dim, self.n_categorical_codes,
-                              bias=self.bias),) 
-#                    nn.Softmax(dim=-1))
+            
     
     def continous_forward(self, x):
         """Forward pass without structured categorical code"""
@@ -124,11 +138,26 @@ class FullyConnectedQNet(nn.Module):
         con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
         return con_code_mean, con_code_logvar
     
+    def continous_forward_extended(self, x):
+        """Forward pass without structured categorical code"""
+        x_out = self.lin(x)
+        con_code_mean = self.con_layer_mean(x_out) # Structured continuous code
+        con_code_logvar = self.con_layer_logvar(x_out) # Structured continuous code
+        return con_code_mean, con_code_logvar
+    
     def full_forward(self, x):
         """Forward pass with structured categorical and continuous codes"""
         cat_code = self.cat_layer(x) # Structured categorical code
         con_code_mean = self.con_layer_mean(x) # Structured continuous code
         con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
+        return cat_code, con_code_mean, con_code_logvar
+    
+    def full_forward_extended(self, x):
+        """Forward pass with structured categorical and continuous codes"""
+        x_out = self.lin(x)
+        cat_code = self.cat_layer(x_out) # Structured categorical code
+        con_code_mean = self.con_layer_mean(x_out) # Structured continuous code
+        con_code_logvar = self.con_layer_logvar(x_out) # Structured continuous code
         return cat_code, con_code_mean, con_code_logvar
 
     def forward(self, x):

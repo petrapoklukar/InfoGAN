@@ -39,6 +39,7 @@ config = {
         'Qnet_config': {
                 'class_name': 'FullyConnectedQNet',
                 'last_layer_dim': 256, # see layer_dims in discriminator
+                'layer_dims': None,
                 'bias': True
                 },
                 
@@ -53,8 +54,8 @@ config = {
 
         'train_config': {
                 'batch_size': 256,
-                'epochs': 100,
-                'snapshot': 20, 
+                'epochs': 300,
+                'snapshot': 50, 
                 'console_print': 1,
                 'optim_type': 'Adam',
                 'gen_lr_schedule': [(0, 2e-4)],
@@ -86,7 +87,9 @@ config = {
         'eval_config': {
                 'filepath': 'models/{0}/infogan_model.pt',
                 'load_checkpoint': False,
-                'n_test_samples': 25,
-                'n_repeats': 5
+                'n_cat_test_samples': 25,
+                'n_cat_repeats': 2,
+                'n_con_test_samples': 100,
+                'n_con_repeats': 5,
                 }
         }

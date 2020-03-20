@@ -398,6 +398,8 @@ class InfoGAN(nn.Module):
             return torch.empty((n_samples, noise_dim), device=self.device).uniform_(-1, 1)
         elif ntype == 'normal':
             return torch.empty((n_samples, noise_dim), device=self.device).normal_()
+        elif ntype == 'equidistant':
+            return torch.from_numpy((np.arange(n_samples + 1) / n_samples) * 4 - 2)
         else:
             raise ValueError('Noise type {0} not recognised.'.format(ntype))
     # -------------------------- #

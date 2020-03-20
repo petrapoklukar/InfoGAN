@@ -7,7 +7,7 @@ AT="@"
 # SBATCH_OR_CAT=cat
 SBATCH_OR_CAT=sbatch
 
-for config in "InfoGAN_MINST_t001" "InfoGAN_MINST_t002"; do
+for config in "InfoGAN_MINST_t001" "InfoGAN_MINST_t002" "InfoGAN_MINST_t003" "InfoGAN_MINST_t004" "InfoGAN_MINST_t005" "InfoGAN_MINST_t006"; do
 
 RUNS_PATH="${SOURCE_PATH}/models/${config}"
 echo $RUNS_PATH
@@ -30,7 +30,7 @@ echo "Activating conda environment"
 conda activate base
 nvidia-smi
 
-python train_InfoGAN_t001_mnist.py \
+python train_InfoGAN_general_mnist.py \
         --config_name=$config \
         --train=1 \
         --eval=1 \

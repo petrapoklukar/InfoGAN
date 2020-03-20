@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Mar 17 16:28:19 2020
+Created on Fri Mar 20 14:00:07 2020
 
 @author: petrapoklukar
 """
@@ -77,7 +77,7 @@ config = {
                 'Qnet_G_grad_clip': None, 
                 
                 'lambda_cat': 1,
-                'lambda_con': 0.1, 
+                'lambda_con': 0.5, 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,

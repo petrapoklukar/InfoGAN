@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Mar 17 16:28:19 2020
+Created on Fri Mar 20 13:58:11 2020
 
 @author: petrapoklukar
 """
@@ -38,7 +38,7 @@ config = {
         'Qnet_config': {
                 'class_name': 'FullyConnectedQNet',
                 'last_layer_dim': 256, # see layer_dims in discriminator
-                'layer_dims': None,
+                'layer_dims': [256, 128, 64],
                 'bias': True
                 },
                 
@@ -70,11 +70,11 @@ config = {
                 'monitor_generator': 1, 
                 
                 'grad_clip': False, 
-                'Snet_D_grad_clip': None, 
-                'Dnet_D_grad_clip': None, 
-                'Gnet_G_grad_clip': None, 
-                'Snet_G_grad_clip': None, 
-                'Qnet_G_grad_clip': None, 
+                'Snet_D_grad_clip': 50, 
+                'Dnet_D_grad_clip': 50, 
+                'Gnet_G_grad_clip': 50, 
+                'Snet_G_grad_clip': 50, 
+                'Qnet_G_grad_clip': 50, 
                 
                 'lambda_cat': 1,
                 'lambda_con': 0.1, 
