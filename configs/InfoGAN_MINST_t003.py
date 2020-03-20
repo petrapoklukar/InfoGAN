@@ -39,6 +39,7 @@ config = {
                 'class_name': 'FullyConnectedQNet',
                 'last_layer_dim': 256, # see layer_dims in discriminator
                 'layer_dims': [256, 128, 64],
+                'dropout': 0.3,
                 'bias': True
                 },
                 

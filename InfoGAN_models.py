@@ -103,6 +103,7 @@ class FullyConnectedQNet(nn.Module):
         self.n_continuous_codes = data_config['structured_con_dim']
         self.forward_pass = self.continous_forward
         self.bias = model_config['bias']
+        self.dropout = model_config['dropout']
         
         # In case of a bigger network
         if self.layer_dims != None:
@@ -112,6 +113,7 @@ class FullyConnectedQNet(nn.Module):
                         'lin' + str(i), 
                         nn.Linear(self.layer_dims[i], self.layer_dims[i+1], 
                         bias=self.bias))
+                self.lin.add_module('dropout' + str(i), nn.Dropout(p=self.dropout))
             self.last_layer_dim = self.layer_dims[-1]
             self.forward_pass = self.full_forward_extended if self.n_categorical_codes > 0 else self.continous_forward_extended
         

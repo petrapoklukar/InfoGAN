@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Mar 17 18:39:33 2020
+Created on Fri Mar 20 14:01:45 2020
 
 @author: petrapoklukar
 """
@@ -20,7 +20,7 @@ config = {
         'Snet_config': {
                 'class_name': 'FullyConnectedSNet',
                 'linear_dims': [512, 256],
-                'dropout': 0.3,
+                'dropout': 0,
                 'image_channels': 1,
                 'image_size': 32,
                 'bias': True
@@ -54,7 +54,7 @@ config = {
 
         'train_config': {
                 'batch_size': 256,
-                'epochs': 300,
+                'epochs': 150,
                 'snapshot': 50, 
                 'console_print': 1,
                 'optim_type': 'Adam',
@@ -68,17 +68,17 @@ config = {
                 'input_noise': False,
                 'input_variance_increase': None, 
                 'discriminator_update_step': 1, 
-                'monitor_generator': 1, 
+                'monitor_generator': 5, 
                 
                 'grad_clip': True, 
-                'Snet_D_grad_clip': 50, 
-                'Dnet_D_grad_clip': 50, 
-                'Gnet_G_grad_clip': 50, 
-                'Snet_G_grad_clip': 50, 
-                'Qnet_G_grad_clip': 50, 
+                'Snet_D_grad_clip': 100, 
+                'Dnet_D_grad_clip': 100, 
+                'Gnet_G_grad_clip': 100, 
+                'Snet_G_grad_clip': 100, 
+                'Qnet_G_grad_clip': 100, 
                 
                 'lambda_cat': 1,
-                'lambda_con': 0.1, 
+                'lambda_con': 0.8, 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,
@@ -88,8 +88,8 @@ config = {
                 'filepath': 'models/{0}/infogan_model.pt',
                 'load_checkpoint': False,
                 'n_cat_test_samples': 25,
-                'n_cat_repeats': 2,
+                'n_cat_repeats': 1,
                 'n_con_test_samples': 100,
-                'n_con_repeats': 5,
+                'n_con_repeats': 3,
                 }
         }
