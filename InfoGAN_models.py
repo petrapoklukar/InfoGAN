@@ -4,14 +4,143 @@
 Created on Thu Nov 21 09:17:10 2019
 
 @author: petrapoklukar
-
-Base implementation thanks to https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/infogan/infogan.py
 """
 
 import torch.nn as nn
 import torch
 import math
 import numpy as np
+
+        
+# ---------------------------------------- #
+# --- Linear Generator & Distriminator --- #
+# ---------------------------------------- #
+class FullyConnectedGNet(nn.Module):
+    def __init__(self, config):
+        super(FullyConnectedGNet, self).__init__()
+        self.latent_dim = config['latent_dim']
+        self.linear_dims = config['linear_dims'] # [256, 512, 1024]
+        self.image_size = config['image_size']
+        self.image_channels = config['image_channels']        
+        self.output_dim = self.image_size * self.image_size * self.image_channels
+        self.dropout = config['dropout'] 
+        self.bias = config['bias'] 
+
+        self.lin = nn.Sequential(
+                nn.Linear(self.latent_dim, self.linear_dims[0], bias=self.bias),
+                nn.ReLU(),
+                nn.Dropout(p=self.dropout),
+                
+                nn.Linear(self.linear_dims[0], self.linear_dims[1], bias=self.bias),
+                nn.ReLU(),
+                nn.Dropout(p=self.dropout),
+                
+                nn.Linear(self.linear_dims[1], self.linear_dims[2], bias=self.bias),
+                nn.ReLU(),
+                nn.Dropout(p=self.dropout),
+                
+                nn.Linear(self.linear_dims[2], self.output_dim, bias=self.bias),
+                nn.Tanh()
+                )
+        
+    def forward(self, *args):
+        gen_input = torch.cat((*args), -1).view(-1, self.latent_dim)
+        out_lin = self.lin(gen_input)
+        out = out_lin.reshape(-1, self.image_channels, self.image_size, self.image_size)
+        return out
+    
+    
+class FullyConnectedSNet(nn.Module):
+    def __init__(self, config):
+        super(FullyConnectedSNet, self).__init__()
+        self.linear_dims = config['linear_dims'] # [512, 256]
+        self.image_size = config['image_size']
+        self.image_channels = config['image_channels']        
+        self.output_dim = self.image_size * self.image_size * self.image_channels
+        self.dropout = config['dropout'] 
+        self.bias = config['bias'] 
+
+        self.lin = nn.Sequential(
+                nn.Linear(self.output_dim, self.linear_dims[0], bias=self.bias),
+                nn.ReLU(),
+                nn.Dropout(p=self.dropout),
+                
+                nn.Linear(self.linear_dims[0], self.linear_dims[1], bias=self.bias),
+                nn.ReLU(),
+                nn.Dropout(p=self.dropout),
+                )
+
+    def forward(self, x):
+        x = x.view(-1, self.output_dim)
+        return self.lin(x)
+
+
+class FullyConnectedDNet(nn.Module):
+    def __init__(self, config):
+        super(FullyConnectedDNet, self).__init__()
+        self.linear_dims = config['linear_dims'] # [512, 256]
+        self.image_size = config['image_size']
+        self.image_channels = config['image_channels'] 
+        self.bias = config['bias'] 
+        self.output_dim = self.image_size * self.image_size * self.image_channels
+
+        self.out = nn.Sequential(
+                nn.Linear(self.linear_dims[1], 1, bias=self.bias),
+                nn.Sigmoid()
+                )
+
+    def forward(self, x):
+        return self.out(x).view(-1)
+    
+    
+class FullyConnectedQNet(nn.Module):
+    def __init__(self, model_config, data_config):
+        super(FullyConnectedQNet, self).__init__()
+        self.last_layer_dim = model_config['last_layer_dim']
+        self.n_categorical_codes = data_config['structured_cat_dim']
+        self.n_continuous_codes = data_config['structured_con_dim']
+        self.forward_pass = self.continous_forward
+        self.bias = model_config['bias']
+        
+        # Model structured continuous code as Gaussian
+        self.con_layer_mean = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
+                                        bias=self.bias)
+        self.con_layer_logvar = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
+                                          bias=self.bias)
+        
+        if self.n_categorical_codes > 0:
+            # Structured categorical code
+            self.forward_pass = self.full_forward
+            print('forward_pass set to full.')
+            self.cat_layer = nn.Sequential(
+                    nn.Linear(self.last_layer_dim, self.n_categorical_codes,
+                              bias=self.bias),) 
+#                    nn.Softmax(dim=-1))
+    
+    def continous_forward(self, x):
+        """Forward pass without structured categorical code"""
+        con_code_mean = self.con_layer_mean(x) # Structured continuous code
+        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
+        return con_code_mean, con_code_logvar
+    
+    def full_forward(self, x):
+        """Forward pass with structured categorical and continuous codes"""
+        cat_code = self.cat_layer(x) # Structured categorical code
+        con_code_mean = self.con_layer_mean(x) # Structured continuous code
+        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
+        return cat_code, con_code_mean, con_code_logvar
+
+    def forward(self, x):
+        return self.forward_pass(x)
+
+
+# -------------------------------------- #
+# -------------------------------------- #
+# -------------------------------------- #
+# --- Archived from this point below --- #
+# -------------------------------------- #
+# -------------------------------------- #
+# -------------------------------------- #  
 
 # --------------------------------------------------------------- #
 # --- To keep track of the dimensions of convolutional layers --- #
@@ -101,133 +230,8 @@ class DNet(nn.Module):
 
     def forward(self, x):
         return self.d_out(x)
-    
-        
-# ---------------------------------------- #
-# --- Linear Generator & Distriminator --- #
-# ---------------------------------------- #
-    
-# From the tests on VanillaGAN
-class FullyConnectedGNet(nn.Module):
-    def __init__(self, config):
-        super(FullyConnectedGNet, self).__init__()
-        self.latent_dim = config['latent_dim']
-        self.linear_dims = config['linear_dims'] # [256, 512, 1024]
-        self.image_size = config['image_size']
-        self.image_channels = config['image_channels']        
-        self.output_dim = self.image_size * self.image_size * self.image_channels
-        self.dropout = config['dropout'] 
-        self.bias = config['bias'] 
-
-        self.lin = nn.Sequential(
-                nn.Linear(self.latent_dim, self.linear_dims[0], bias=self.bias),
-                nn.ReLU(),
-                nn.Dropout(p=self.dropout),
-                
-                nn.Linear(self.linear_dims[0], self.linear_dims[1], bias=self.bias),
-                nn.ReLU(),
-                nn.Dropout(p=self.dropout),
-                
-                nn.Linear(self.linear_dims[1], self.linear_dims[2], bias=self.bias),
-                nn.ReLU(),
-                nn.Dropout(p=self.dropout),
-                
-                nn.Linear(self.linear_dims[2], self.output_dim, bias=self.bias),
-                nn.Tanh()
-                )
-        
-    def forward(self, *args):
-        gen_input = torch.cat((*args), -1).view(-1, self.latent_dim)
-        out_lin = self.lin(gen_input)
-        out = out_lin.reshape(-1, self.image_channels, self.image_size, self.image_size)
-        return out
-    
-    
-class FullyConnectedSNet_Architecture2(nn.Module):
-    def __init__(self, config):
-        super(FullyConnectedSNet_Architecture2, self).__init__()
-        self.linear_dims = config['linear_dims'] # [512, 256]
-        self.image_size = config['image_size']
-        self.image_channels = config['image_channels']        
-        self.output_dim = self.image_size * self.image_size * self.image_channels
-        self.dropout = config['dropout'] 
-        self.bias = config['bias'] 
-
-        self.lin = nn.Sequential(
-                nn.Linear(self.output_dim, self.linear_dims[0], bias=self.bias),
-                nn.ReLU(),
-                nn.Dropout(p=self.dropout),
-                
-                nn.Linear(self.linear_dims[0], self.linear_dims[1], bias=self.bias),
-                nn.ReLU(),
-                nn.Dropout(p=self.dropout),
-                )
-
-    def forward(self, x):
-        x = x.view(-1, self.output_dim)
-        return self.lin(x)
 
 
-class FullyConnectedDNet(nn.Module):
-    def __init__(self, config):
-        super(FullyConnectedDNet, self).__init__()
-        self.linear_dims = config['linear_dims'] # [512, 256]
-        self.image_size = config['image_size']
-        self.image_channels = config['image_channels'] 
-        self.bias = config['bias'] 
-        self.output_dim = self.image_size * self.image_size * self.image_channels
-
-        self.out = nn.Sequential(
-                nn.Linear(self.linear_dims[1], 1, bias=self.bias),
-                nn.Sigmoid()
-                )
-
-    def forward(self, x):
-        return self.out(x).view(-1)
-    
-    
-class FullyConnectedQNet(nn.Module):
-    def __init__(self, model_config, data_config):
-        super(FullyConnectedQNet, self).__init__()
-        self.last_layer_dim = model_config['last_layer_dim']
-        self.n_categorical_codes = data_config['structured_cat_dim']
-        self.n_continuous_codes = data_config['structured_con_dim']
-        self.forward_pass = self.continous_forward
-        self.bias = model_config['bias']
-        
-        # Model structured continuous code as Gaussian
-        self.con_layer_mean = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
-                                        bias=self.bias)
-        self.con_layer_logvar = nn.Linear(self.last_layer_dim, self.n_continuous_codes,
-                                          bias=self.bias)
-        
-        if self.n_categorical_codes > 0:
-            # Structured categorical code
-            self.forward_pass = self.full_forward
-            print('forward_pass set to full.')
-            self.cat_layer = nn.Sequential(
-                    nn.Linear(self.last_layer_dim, self.n_categorical_codes,
-                              bias=self.bias),) 
-#                    nn.Softmax(dim=-1))
-    
-    def continous_forward(self, x):
-        """Forward pass without structured categorical code"""
-        con_code_mean = self.con_layer_mean(x) # Structured continuous code
-        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
-        return con_code_mean, con_code_logvar
-    
-    def full_forward(self, x):
-        """Forward pass with structured categorical and continuous codes"""
-        cat_code = self.cat_layer(x) # Structured categorical code
-        con_code_mean = self.con_layer_mean(x) # Structured continuous code
-        con_code_logvar = self.con_layer_logvar(x) # Structured continuous code
-        return cat_code, con_code_mean, con_code_logvar
-
-    def forward(self, x):
-        return self.forward_pass(x)
-
-    
-# From the first InfoGAN implementation   
 class FullyConnectedGenerator_archived(nn.Module):
     def __init__(self, gen_config, data_config):
         super(FullyConnectedGenerator_archived, self).__init__()
@@ -280,6 +284,7 @@ class FullyConnectedDiscriminator_archived(nn.Module):
         out = self.discriminator(x) # Needed for QNet
         validity = self.d_out(out) # Usual discriminator output
         return validity, out
+
 # ----------------------------------------------- #
 # --- Convolutional Generator & Distriminator --- #
 # ----------------------------------------------- #
