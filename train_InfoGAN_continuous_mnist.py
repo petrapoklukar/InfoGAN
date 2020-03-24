@@ -11,7 +11,7 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import InfoGAN_continuous as model
-
+import numpy as np
 import matplotlib
 matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     # # Laptop TESTING
     # args.config_name = 'InfoGAN_MINST_testing'
     # args.train = 1
-    # args.chpnt_path = 'models/InfoGAN_MINST_testing/infogan_lastCheckpoint.pth'
+    # args.chpnt_path = ''#'models/InfoGAN_MINST_testing/infogan_lastCheckpoint.pth'
     # args.device = None
     # args.eval = 1
     
