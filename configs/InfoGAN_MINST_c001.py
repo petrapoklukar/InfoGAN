@@ -6,6 +6,7 @@ Created on Tue Mar 24 10:28:35 2020
 @author: petrapoklukar
 """
 
+
 config = {
         'Gnet_config': {
                 'class_name': 'FullyConnectedGNet',
@@ -54,8 +55,8 @@ config = {
 
         'train_config': {
                 'batch_size': 256,
-                'epochs': 15,
-                'snapshot': 5, 
+                'epochs': 150,
+                'snapshot': 50, 
                 'console_print': 1,
                 'optim_type': 'Adam',
                 'Goptim_lr_schedule': [(0, 2e-4)],

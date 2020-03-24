@@ -115,9 +115,9 @@ class FullyConnectedQNet(nn.Module):
                         bias=self.bias))
                 self.lin.add_module('dropout' + str(i), nn.Dropout(p=self.dropout))
             self.last_layer_dim = self.layer_dims[-1]
-            self.forward_pass = self.full_forward_extended if self.n_categorical_codes > 0 else self.continous_forward_extended
+            self.forward_pass = self.full_forward_extended if self.n_categorical_codes else self.continous_forward_extended
         
-        if self.n_categorical_codes > 0:
+        if self.n_categorical_codes is not None:
             # Structured categorical code
             self.forward_pass = self.full_forward if self.layer_dims == None else self.full_forward_extended
             print('forward_pass set to full.')
