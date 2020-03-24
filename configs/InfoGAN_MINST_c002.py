@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Mar 24 10:28:35 2020
+Created on Tue Mar 24 12:42:59 2020
 
 @author: petrapoklukar
 """
-
 
 config = {
         'Gnet_config': {
@@ -79,7 +78,7 @@ config = {
                 'Snet_G_grad_clip': 100, 
                 'Qnet_G_grad_clip': 100, 
                 
-                'lambda_con': 0.1, 
+                'lambda_con': 0.5, 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,

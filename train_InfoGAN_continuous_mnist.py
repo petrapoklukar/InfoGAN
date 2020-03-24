@@ -15,17 +15,16 @@ import InfoGAN_continuous as model
 import matplotlib
 matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
-import numpy as np
 from importlib.machinery import SourceFileLoader
 import os
 import argparse
 
 parser = argparse.ArgumentParser(description='VAE training for robot motion trajectories')
-# parser.add_argument('--config_name', default=None, type=str, help='the path to save/load the model')
-# parser.add_argument('--train', default=0, type=int, help='set it to train the model')
-# parser.add_argument('--chpnt_path', default='', type=str, help='set it to train the model')
-# parser.add_argument('--eval', default=0, type=int, help='evaluates the trained model')
-# parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
+parser.add_argument('--config_name', default=None, type=str, help='the path to save/load the model')
+parser.add_argument('--train', default=0, type=int, help='set it to train the model')
+parser.add_argument('--chpnt_path', default='', type=str, help='set it to train the model')
+parser.add_argument('--eval', default=0, type=int, help='evaluates the trained model')
+parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
 
 
 class ImageDataset(Dataset):
@@ -53,12 +52,12 @@ class ImageDataset(Dataset):
 if __name__ == '__main__':
     args = parser.parse_args()
     
-    # Laptop TESTING
-    args.config_name = 'InfoGAN_MINST_testing'
-    args.train = 1
-    args.chpnt_path = ''#'models/InfoGAN_MINST_t001/infogan_checkpoint3.pth'
-    args.device = None
-    args.eval = 1
+    # # Laptop TESTING
+    # args.config_name = 'InfoGAN_MINST_testing'
+    # args.train = 1
+    # args.chpnt_path = 'models/InfoGAN_MINST_testing/infogan_lastCheckpoint.pth'
+    # args.device = None
+    # args.eval = 1
     
     # Load config
     config_file = os.path.join('.', 'configs', args.config_name + '.py')
@@ -85,7 +84,7 @@ if __name__ == '__main__':
     path_to_data = config_file['data_config']['path_to_data']
     dataset = ImageDataset('MNIST', path_to_data)
     # Laptop TESTING
-    dataset =  torch.utils.data.Subset(dataset, np.arange(128*5))
+    # dataset =  torch.utils.data.Subset(dataset, np.arange(128*5))
     dloader = DataLoader(dataset, batch_size=config_file['train_config']['batch_size'],
                          shuffle=True, num_workers=2)
     dloader_iter = iter(dloader)
