@@ -48,7 +48,8 @@ class InfoGAN(nn.Module):
         self.Dnet_update_step = train_config['Dnet_update_step']
         self.monitor_Gnet = train_config['monitor_Gnet']
         self.Gnet_progress_repeat = train_config['Gnet_progress_repeat']
-        self.Gnet_progress_nimg = int(self.cat_c_dim * self.Gnet_progress_repeat)
+        self.Gnet_progress_nimg = int(
+            config['data_config']['structured_cat_dim'] * self.Gnet_progress_repeat)
         
         # Info parameters
         self.data_config = config['data_config']

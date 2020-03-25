@@ -93,7 +93,7 @@ config = {
                 'n_con_test_samples': 100, 
                 'n_con_repeats': 3,
                 'cat_repeat': 10, 
-                'con_var_range': 2
+                'con_var_range': 2,
                 'n_prd_samples': 1000
                 }
         }

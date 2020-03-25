@@ -6,10 +6,11 @@ Created on Tue Mar 24 10:28:35 2020
 @author: petrapoklukar
 """
 
+
 config = {
         'Gnet_config': {
                 'class_name': 'FullyConnectedGNet',
-                'latent_dim': 74,
+                'latent_dim': 64,
                 'linear_dims': [256, 512, 1024],
                 'dropout': 0.3,
                 'image_channels': 1,
@@ -45,10 +46,10 @@ config = {
                 
         'data_config': {
                 'input_size': None,
-                'usual_noise_dim': 62,
-                'structured_cat_dim': 10, 
+                'usual_noise_dim': 62, 
                 'structured_con_dim': 2,
-                'total_noise': 74,
+                'structured_cat_dim': None,
+                'total_noise': 64,
                 'path_to_data': '../datasets/MNIST'
                 },
 
@@ -69,7 +70,7 @@ config = {
                 'input_variance_increase': None, 
                 'Dnet_update_step': 1, 
                 'monitor_Gnet': 5, 
-                'Gnet_progress_repeat': 10, 
+                'Gnet_progress_nimg': 100,
                 
                 'grad_clip': True, 
                 'Snet_D_grad_clip': 100, 
@@ -78,8 +79,7 @@ config = {
                 'Snet_G_grad_clip': 100, 
                 'Qnet_G_grad_clip': 100, 
                 
-                'lambda_cat': 1,
-                'lambda_con': 0.5, 
+                'lambda_con': 0.1, 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,
@@ -88,12 +88,9 @@ config = {
         'eval_config': {
                 'filepath': 'models/{0}/infogan_model.pt',
                 'load_checkpoint': False,
-                'n_cat_test_samples': 25,
-                'n_cat_repeats': 1,
                 'n_con_test_samples': 100,
                 'n_con_repeats': 3,
-                'cat_repeat': 10, 
-                'con_var_range': 2
+                'con_var_range': 2,
                 'n_prd_samples': 1000
                 }
         }

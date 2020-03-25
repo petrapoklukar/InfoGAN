@@ -61,11 +61,11 @@ if __name__ == '__main__':
     
     # # Laptop TESTING
     # args.config_name = 'InfoGAN_MINST_testing'
-    # args.train = 1
+    # args.train = 0
     # args.chpnt_path = ''#'models/InfoGAN_MINST_testing/infogan_lastCheckpoint.pth'
     # args.device = None
     # args.eval = 0
-    # args.compute_prd = 0
+    # args.compute_prd = 1
     
     # Load config
     config_file = os.path.join('.', 'configs', args.config_name + '.py')

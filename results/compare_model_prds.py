@@ -14,6 +14,8 @@ import numpy as np
 from importlib.machinery import SourceFileLoader
 import os
 import argparse
+import sys
+sys.path.insert(0,'..')
 import prd_score as prd
 from itertools import groupby
 
@@ -67,10 +69,11 @@ def compare_prd(model_type, configs, baseline_indices=None):
 
     prd_scores = []
     prd_models = []   
+    parent_dir = '../'
     for config_name in configs:
         # Load model config
-        config_file = os.path.join('.', 'configs', config_name + '.py')
-        export_directory = os.path.join('.', 'models', config_name)
+        config_file = os.path.join(parent_dir, 'configs', config_name + '.py')
+        export_directory = os.path.join(parent_dir, 'models', config_name)
     
         print(' *- Config name: {0}'.format(config_name))
         
@@ -85,7 +88,7 @@ def compare_prd(model_type, configs, baseline_indices=None):
         # Init the model
         model = models.InfoGAN(config_file)
         eval_config = config_file['eval_config']
-        eval_config['filepath'] = eval_config['filepath'].format(config_name)
+        eval_config['filepath'] = parent_dir + eval_config['filepath'].format(config_name)
         model.load_model(eval_config)
         print(eval_config)
     
@@ -93,7 +96,7 @@ def compare_prd(model_type, configs, baseline_indices=None):
         n_prd_samples = eval_config['n_prd_samples']
         
         # Get the ground truth np array from the test split
-        path_to_data = config_file['data_config']['path_to_data']
+        path_to_data = parent_dir + config_file['data_config']['path_to_data']
         test_dataset = ImageDataset('MNIST', path_to_data, train_split=False)
         ref_np = test_dataset.get_subset(len(test_dataset), n_prd_samples, 
                                          fixed_indices=baseline_indices)
