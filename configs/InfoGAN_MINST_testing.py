@@ -9,7 +9,7 @@ Created on Tue Mar 24 10:28:35 2020
 config = {
         'Gnet_config': {
                 'class_name': 'FullyConnectedGNet',
-                'latent_dim': 70,
+                'latent_dim': 74,
                 'linear_dims': [256, 512, 1024],
                 'dropout': 0.3,
                 'image_channels': 1,
@@ -45,17 +45,17 @@ config = {
                 
         'data_config': {
                 'input_size': None,
-                'usual_noise_dim': 62, 
-                'structured_con_dim': 8,
-                'structured_cat_dim': None,
-                'total_noise': 70,
+                'usual_noise_dim': 62,
+                'structured_cat_dim': 10, 
+                'structured_con_dim': 2,
+                'total_noise': 74,
                 'path_to_data': '../datasets/MNIST'
                 },
 
         'train_config': {
                 'batch_size': 256,
-                'epochs': 15,
-                'snapshot': 5, 
+                'epochs': 150,
+                'snapshot': 50, 
                 'console_print': 1,
                 'optim_type': 'Adam',
                 'Goptim_lr_schedule': [(0, 2e-4)],
@@ -69,7 +69,7 @@ config = {
                 'input_variance_increase': None, 
                 'Dnet_update_step': 1, 
                 'monitor_Gnet': 5, 
-                'Gnet_progress_nimg': 100,
+                'Gnet_progress_repeat': 10, 
                 
                 'grad_clip': True, 
                 'Snet_D_grad_clip': 100, 
@@ -78,6 +78,7 @@ config = {
                 'Snet_G_grad_clip': 100, 
                 'Qnet_G_grad_clip': 100, 
                 
+                'lambda_cat': 1,
                 'lambda_con': 0.5, 
                 
                 'filename': 'infogan',
@@ -87,8 +88,12 @@ config = {
         'eval_config': {
                 'filepath': 'models/{0}/infogan_model.pt',
                 'load_checkpoint': False,
+                'n_cat_test_samples': 25,
+                'n_cat_repeats': 1,
                 'n_con_test_samples': 100,
                 'n_con_repeats': 3,
+                'cat_repeat': 10, 
                 'con_var_range': 2
+                'n_prd_samples': 1000
                 }
         }

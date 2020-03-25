@@ -58,17 +58,18 @@ config = {
                 'snapshot': 50, 
                 'console_print': 1,
                 'optim_type': 'Adam',
-                'gen_lr_schedule': [(0, 2e-4)],
-                'gen_b1': 0.7,
-                'gen_b2': 0.999,
-                'dis_lr_schedule': [(0, 2e-4)],
-                'dis_b1': 0.7,
-                'dis_b2': 0.999,
+                'Goptim_lr_schedule': [(0, 2e-4)],
+                'Goptim_b1': 0.7,
+                'Goptim_b2': 0.999,
+                'Doptim_lr_schedule': [(0, 2e-4)],
+                'Doptim_b1': 0.7,
+                'Doptim_b2': 0.999,
                 
                 'input_noise': False,
                 'input_variance_increase': None, 
-                'discriminator_update_step': 1, 
-                'monitor_generator': 1, 
+                'Dnet_update_step': 1, 
+                'monitor_Gnet': 1, 
+                'Gnet_progress_repeat': 10, 
                 
                 'grad_clip': True, 
                 'Snet_D_grad_clip': 50, 
@@ -91,5 +92,8 @@ config = {
                 'n_cat_repeats': 2,
                 'n_con_test_samples': 100,
                 'n_con_repeats': 5,
+                'cat_repeat': 10, 
+                'con_var_range': 2
+                'n_prd_samples': 1000
                 }
         }

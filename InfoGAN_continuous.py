@@ -158,7 +158,7 @@ class InfoGAN(nn.Module):
                     G_params,
                     lr=self.Goptim_lr, 
                     betas=(optim_config['Goptim_b1'], optim_config['Goptim_b2']))
-            print(' *- Initialised generator optimiser: Adam')
+            print(' *- Initialised G optimiser: Adam')
             
             # Discriminator optimiser
             D_params = list(self.Snet.parameters()) + list(self.Dnet.parameters())
@@ -166,7 +166,7 @@ class InfoGAN(nn.Module):
                     D_params, 
                     lr=self.Doptim_lr, 
                     betas=(optim_config['Doptim_b1'], optim_config['Doptim_b2']))
-            print(' *- Initialised discriminator optimiser: Adam')
+            print(' *- Initialised D optimiser: Adam')
             
         else: 
             raise NotImplementedError(
@@ -205,12 +205,7 @@ class InfoGAN(nn.Module):
             if param.requires_grad:
                 param_norm = param.grad.data.norm(2).item()
                 total_norm.append(np.around(param_norm, decimals=3))
-        return total_norm
-#                print('===\ngradient:{}\n {}\n {}'.format(
-#                        name, torch.mean(param.grad), param_norm))        
-#        total_norm = total_norm ** (1. / 2)
-#        print('===\ngradients:{}'.format(total_norm))        
-        
+        return total_norm              
         
     def count_parameters(self, model):
         """Counts the total number of trainable parameters in the model."""
@@ -613,11 +608,11 @@ class InfoGAN(nn.Module):
                 "[Epoch %d/%d]\n\t[Total D loss: %f] [Total G loss: %f]"
                 % (self.current_epoch, self.epochs, epoch_loss[0], epoch_loss[1]))
             print(
-                "\t[D_real_loss: %f] [D_fake_loss: %f] [D_i_loss: %f]"
-                % (epoch_loss[2], epoch_loss[3], epoch_loss[4]))
+                "\t[D_real_loss: %f] [D_fake_loss: %f]"
+                % (epoch_loss[2], epoch_loss[3]))
             print(
                 "\t[G_loss: %f] [G_i_loss: %f]"
-                % (epoch_loss[5], epoch_loss[6]))
+                % (epoch_loss[4], epoch_loss[5]))
             print(
                 "\t[D_x %f] [D_G_z1: %f] [D_G_z2: %f]"
                 % (D_x, D_G_z1, D_G_z2))
@@ -696,7 +691,7 @@ class InfoGAN(nn.Module):
                     ])
             f.writelines(list(map(
                     lambda t: '{0:>3} Epoch {7}: ({1:.2f}, {2:.2f}, {3:.2f}, {4:.2f}, {5:.2f}, {6:.2f})\n'.format(
-                            '', t[0], t[1], t[2], t[3], t[4], t[5], t[6]), 
+                            '', t[0], t[1], t[2], t[3], t[4], t[5]), 
                     epoch_losses)))
         print(' *- Model saved.\n')
     
