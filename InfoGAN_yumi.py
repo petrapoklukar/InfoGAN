@@ -351,22 +351,18 @@ class InfoGAN(nn.Module):
         plt.savefig(self.save_path + '_G_totalGaradients')
         plt.clf()
         plt.close()
+
     
-    def sq_else_perm(self, img):
-        """"""
-        grayscale = True if img.shape[1] == 1 else False
-        return img.squeeze() if grayscale else img.permute(1,2,0)
-    
-    def plot_image_grid(self, images, filename, directory, n=0):
-        """Plots a grid of (generated) images."""
-        
+    def plot_traj_grid(self, x, filename, directory, n=0):
+        """Plots a grid of (generated) images."""  
+        x = x.detach() # -1, n_joints, traj_length
         n_subplots = np.sqrt(n).astype(int) if n!=0 else self.Gnet_progress_nimg
         plot_range = n_subplots ** 2
-        images = self.sq_else_perm(images)
         for i in range(plot_range):
             plt.subplot(n_subplots, n_subplots, 1 + i)
             plt.axis('off')
-            plt.imshow(images[i].detach().cpu().numpy())
+            for j in range(6):
+                plt.plot(x[i][j])
         plt.savefig(directory + filename)
         plt.clf()
         plt.close()
@@ -512,7 +508,7 @@ class InfoGAN(nn.Module):
         
                 # Usual discriminator Loss for real images
                 real_x = self.dinput_noise(real_x)
-                d_real_x = self.d_forward(real_x)                
+                d_real_x = self.d_forward(real_x)     
                 assert torch.sum(torch.isnan(d_real_x)) == 0, d_real_x
                 assert(d_real_x >= 0.).all(), d_real_x
                 assert(d_real_x <= 1.).all(), d_real_x
@@ -646,10 +642,9 @@ class InfoGAN(nn.Module):
                 
             if (self.current_epoch + 1) % self.monitor_Gnet == 0:
                 gen_x = self.Gnet((self.fixed_z_noise, self.fixed_con_noise)) 
-                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
-                   
-                filename = 'genImages' + str(self.current_epoch)
-                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=100)
+                
+                filename = 'genTraj' + str(self.current_epoch)
+                self.plot_traj_grid(gen_x, filename, self.train_dir, n=9)
                 
         
         # ---------------------- #
@@ -691,7 +686,7 @@ class InfoGAN(nn.Module):
                     ])
             f.writelines(list(map(
                     lambda t: '{0:>3} Epoch {7}: ({1:.2f}, {2:.2f}, {3:.2f}, {4:.2f}, {5:.2f}, {6:.2f})\n'.format(
-                            '', t[0], t[1], t[2], t[3], t[4], t[5]), 
+                            '', t[0], t[1], t[2], t[3], t[4], t[5], t[6]), 
                     epoch_losses)))
         print(' *- Model saved.\n')
     
@@ -874,20 +869,19 @@ if __name__ == '__main__':
     config = {
         'Gnet_config': {
                 'class_name': 'FullyConnectedGNet',
-                'latent_dim': 100,
-                'linear_dims': [256, 512, 1024],
+                'latent_dim': 2,
+                'linear_dims': [128, 256, 512],
                 'dropout': 0.3,
-                'image_channels': 1,
-                'image_size': 32,
+                'output_dim': 7*79,
+                'output_reshape_dims': [-1, 7, 79],
                 'bias': True
                 },
         
         'Snet_config': {
-                'class_name': 'FullyConnectedSNet_Architecture2',
+                'class_name': 'FullyConnectedSNet',
                 'linear_dims': [512, 256],
                 'dropout': 0,
-                'image_channels': 1,
-                'image_size': 32,
+                'output_dim': 7*79,
                 'bias': True
                 },
         
@@ -895,29 +889,32 @@ if __name__ == '__main__':
                 'class_name': 'FullyConnectedDNet',
                 'linear_dims': [512, 256],
                 'dropout': 0,
-                'image_channels': 1,
-                'image_size': 32,
                 'bias': True
                 },
                 
         'Qnet_config': {
                 'class_name': 'FullyConnectedQNet',
                 'last_layer_dim': 256, # see layer_dims in discriminator
+                'layer_dims': [256, 128],
+                'dropout': 0.3,
                 'bias': True
                 },
                 
         'data_config': {
-                'input_size': None,
-                'usual_noise_dim': 62,
-                'structured_con_dim': 2,
-                'total_noise': 74,
-                'path_to_data': '../datasets/MNIST'
+                'input_size': 7*79,
+                'n_joints': 7,
+                'traj_length': 79,
+                'usual_noise_dim': 1, 
+                'structured_con_dim': 1,
+                'structured_cat_dim': None,
+                'total_noise': 2,
+                'path_to_data': 'dataset/robot_trajectories/yumi_joint_pose.npy',
                 },
 
         'train_config': {
-                'batch_size': 128,
-                'epochs': 100,
-                'snapshot': 20, 
+                'batch_size': 256,
+                'epochs': 25,
+                'snapshot': 10, 
                 'console_print': 1,
                 'optim_type': 'Adam',
                 'Goptim_lr_schedule': [(0, 2e-4)],
@@ -930,22 +927,32 @@ if __name__ == '__main__':
                 'input_noise': False,
                 'input_variance_increase': None, 
                 'Dnet_update_step': 1, 
-                'monitor_Gnet': 1, 
+                'monitor_Gnet': 5, 
                 'Gnet_progress_nimg': 100,
                 
-                'grad_clip': False, 
-                'Snet_D_grad_clip': None, 
-                'Dnet_D_grad_clip': None, 
-                'Gnet_G_grad_clip': None, 
-                'Snet_G_grad_clip': None, 
-                'Qnet_G_grad_clip': None, 
+                'grad_clip': True, 
+                'Snet_D_grad_clip': 100, 
+                'Dnet_D_grad_clip': 100, 
+                'Gnet_G_grad_clip': 100, 
+                'Snet_G_grad_clip': 100, 
+                'Qnet_G_grad_clip': 100, 
                 
-                'lambda_con': 0.9, 
+                'lambda_con': 1., 
                 
-                'filename': 'gan',
+                'filename': 'infogan',
                 'random_seed': 1201,
-                'exp_dir': 'models/DUMMY'
+                },
+                
+        'eval_config': {
+                'filepath': 'models/{0}/infogan_model.pt',
+                'savefig_path': 'models/{0}/Testing/{1}.png',
+                'load_checkpoint': False,
+                'n_con_test_samples': 100,
+                'n_con_repeats': 3,
+                'con_var_range': 2,
+                'n_prd_samples': 1000
                 }
         }
+
     
     model = InfoGAN(config)

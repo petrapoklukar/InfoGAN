@@ -21,9 +21,8 @@ class FullyConnectedGNet(nn.Module):
         super(FullyConnectedGNet, self).__init__()
         self.latent_dim = config['latent_dim']
         self.linear_dims = config['linear_dims'] # [256, 512, 1024]
-        self.image_size = config['image_size']
-        self.image_channels = config['image_channels']        
-        self.output_dim = self.image_size * self.image_size * self.image_channels
+        self.output_reshape_dims = config['output_reshape_dims']        
+        self.output_dim = config['output_dim']   
         self.dropout = config['dropout'] 
         self.bias = config['bias'] 
 
@@ -41,23 +40,26 @@ class FullyConnectedGNet(nn.Module):
                 nn.Dropout(p=self.dropout),
                 
                 nn.Linear(self.linear_dims[2], self.output_dim, bias=self.bias),
-                nn.Tanh()
                 )
+        
+        if config['out_activation'] == 'tanh': 
+            self.activation = nn.Tanh()
+        else:
+            self.activation = lambda x: x
         
     def forward(self, *args):
         gen_input = torch.cat((*args), -1).view(-1, self.latent_dim)
         out_lin = self.lin(gen_input)
-        out = out_lin.reshape(-1, self.image_channels, self.image_size, self.image_size)
+        out_lin = self.activation(out_lin)
+        out = out_lin.reshape(self.output_reshape_dims)
         return out
     
     
 class FullyConnectedSNet(nn.Module):
     def __init__(self, config):
         super(FullyConnectedSNet, self).__init__()
-        self.linear_dims = config['linear_dims'] # [512, 256]
-        self.image_size = config['image_size']
-        self.image_channels = config['image_channels']        
-        self.output_dim = self.image_size * self.image_size * self.image_channels
+        self.linear_dims = config['linear_dims'] # [512, 256]       
+        self.output_dim = config['output_dim']
         self.dropout = config['dropout'] 
         self.bias = config['bias'] 
 
@@ -72,7 +74,7 @@ class FullyConnectedSNet(nn.Module):
                 )
 
     def forward(self, x):
-        x = x.view(-1, self.output_dim)
+        x = x.view(x.size(0), self.output_dim)
         return self.lin(x)
 
 
@@ -80,10 +82,7 @@ class FullyConnectedDNet(nn.Module):
     def __init__(self, config):
         super(FullyConnectedDNet, self).__init__()
         self.linear_dims = config['linear_dims'] # [512, 256]
-        self.image_size = config['image_size']
-        self.image_channels = config['image_channels'] 
         self.bias = config['bias'] 
-        self.output_dim = self.image_size * self.image_size * self.image_channels
 
         self.out = nn.Sequential(
                 nn.Linear(self.linear_dims[1], 1, bias=self.bias),

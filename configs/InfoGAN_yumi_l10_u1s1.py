@@ -6,23 +6,24 @@ Created on Tue Mar 24 10:28:35 2020
 @author: petrapoklukar
 """
 
+
 config = {
         'Gnet_config': {
                 'class_name': 'FullyConnectedGNet',
-                'latent_dim': 70,
-                'linear_dims': [256, 512, 1024],
+                'latent_dim': 2,
+                'linear_dims': [128, 256, 512],
                 'dropout': 0.3,
-                'output_dim': 32*32,
-                'output_reshape_dims': [-1, 1, 32, 32],
-                'out_activation': 'tanh',
-                'bias': True
+                'output_dim': 7*79,
+                'output_reshape_dims': [-1, 7, 79],
+                'bias': True,
+                'out_activation': None
                 },
         
         'Snet_config': {
                 'class_name': 'FullyConnectedSNet',
                 'linear_dims': [512, 256],
                 'dropout': 0,
-                'output_dim': 32*32,
+                'output_dim': 7*79,
                 'bias': True
                 },
         
@@ -42,18 +43,20 @@ config = {
                 },
                 
         'data_config': {
-                'input_size': None,
-                'usual_noise_dim': 62, 
-                'structured_con_dim': 8,
+                'input_size': 7*79,
+                'n_joints': 7,
+                'traj_length': 79,
+                'usual_noise_dim': 1, 
+                'structured_con_dim': 1,
                 'structured_cat_dim': None,
-                'total_noise': 70,
-                'path_to_data': '../datasets/MNIST'
+                'total_noise': 2,
+                'path_to_data': 'dataset/robot_trajectories/yumi_joint_pose.npy',
                 },
 
         'train_config': {
                 'batch_size': 256,
-                'epochs': 15,
-                'snapshot': 5, 
+                'epochs': 25,
+                'snapshot': 1, 
                 'console_print': 1,
                 'optim_type': 'Adam',
                 'Goptim_lr_schedule': [(0, 2e-4)],
@@ -66,8 +69,8 @@ config = {
                 'input_noise': False,
                 'input_variance_increase': None, 
                 'Dnet_update_step': 1, 
-                'monitor_Gnet': 5, 
-                'Gnet_progress_nimg': 100,
+                'monitor_Gnet': 1, 
+                'Gnet_progress_nimg': 9,
                 
                 'grad_clip': True, 
                 'Snet_D_grad_clip': 100, 
@@ -76,7 +79,7 @@ config = {
                 'Snet_G_grad_clip': 100, 
                 'Qnet_G_grad_clip': 100, 
                 
-                'lambda_con': 1, 
+                'lambda_con': 1., 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,
@@ -84,8 +87,9 @@ config = {
                 
         'eval_config': {
                 'filepath': 'models/{0}/infogan_model.pt',
+                'savefig_path': 'models/{0}/Testing/{1}.png',
                 'load_checkpoint': False,
-                'n_con_test_samples': 100,
+                'n_con_test_samples': 9,
                 'n_con_repeats': 3,
                 'con_var_range': 2,
                 'n_prd_samples': 1000

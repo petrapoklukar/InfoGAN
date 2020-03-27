@@ -13,8 +13,9 @@ config = {
                 'latent_dim': 64,
                 'linear_dims': [256, 512, 1024],
                 'dropout': 0.3,
-                'image_channels': 1,
-                'image_size': 32,
+                'output_dim': 32*32,
+                'output_reshape_dims': [-1, 1, 32, 32],
+                'out_activation': 'tanh',
                 'bias': True
                 },
         
@@ -22,8 +23,7 @@ config = {
                 'class_name': 'FullyConnectedSNet',
                 'linear_dims': [512, 256],
                 'dropout': 0,
-                'image_channels': 1,
-                'image_size': 32,
+                'output_dim': 32*32,
                 'bias': True
                 },
         
@@ -31,8 +31,6 @@ config = {
                 'class_name': 'FullyConnectedDNet',
                 'linear_dims': [512, 256],
                 'dropout': 0,
-                'image_channels': 1,
-                'image_size': 32,
                 'bias': True
                 },
                 

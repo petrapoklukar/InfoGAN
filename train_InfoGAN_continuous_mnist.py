@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-import InfoGAN_continuous as models
+import InfoGAN_mnist_continuous as models
 import numpy as np
 import matplotlib
 matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
