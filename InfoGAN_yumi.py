@@ -355,7 +355,7 @@ class InfoGAN(nn.Module):
     
     def plot_traj_grid(self, x, filename, directory, n=0):
         """Plots a grid of (generated) images."""  
-        x = x.detach() # -1, n_joints, traj_length
+        x = x.detach().cpu() # -1, n_joints, traj_length
         n_subplots = np.sqrt(n).astype(int) if n!=0 else self.Gnet_progress_nimg
         plot_range = n_subplots ** 2
         for i in range(plot_range):
