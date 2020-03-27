@@ -34,7 +34,7 @@ class TrajDataset(Dataset):
         else:
             self.device = device
         self.data = torch.from_numpy(
-                np.load(data_filename)).float().to(self.device)
+                np.load(data_filename)).float()#.to(self.device)
         self.num_samples = self.data.shape[0]                
     
     def get_subset(self, max_ind, n_points):
@@ -46,7 +46,7 @@ class TrajDataset(Dataset):
         return self.num_samples
     
     def __getitem__(self, idx):
-        return self.data[idx].to(self.device)
+        return self.data[idx]#.to(self.device)
 
 
 if __name__ == '__main__':
