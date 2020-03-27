@@ -36,6 +36,5 @@ python train_robot_traj.py \
         --eval=1 \
         --device="cuda" \
         --compute_prd=1
-
 HERE
 done
