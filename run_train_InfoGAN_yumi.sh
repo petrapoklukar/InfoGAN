@@ -7,7 +7,7 @@ AT="@"
 # SBATCH_OR_CAT=cat
 SBATCH_OR_CAT=sbatch
 
-for config in "InfoGAN_yumi_l10_u1s1"; do
+for config in "InfoGAN_yumi_l10_u1s1" "InfoGAN_yumi_l10_u3s3"; do
 
 RUNS_PATH="${SOURCE_PATH}/models/${config}"
 echo $RUNS_PATH

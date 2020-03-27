@@ -175,7 +175,7 @@ if __name__ == '__main__':
         with torch.no_grad():
             z_noise, con_noise = model.ginput_noise(n_prd_samples)
             eval_data = model.Gnet((z_noise, con_noise))
-            eval_np = eval_data.numpy().reshape(n_prd_samples, -1)
+            eval_np = eval_data.cpu().numpy().reshape(n_prd_samples, -1)
      
         # Compute prd
         prd_data = prd.compute_prd_from_embedding(eval_np, ref_np)
