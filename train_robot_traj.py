@@ -17,6 +17,7 @@ from importlib.machinery import SourceFileLoader
 import os
 import argparse
 import prd_score as prd
+import pickle
 
 parser = argparse.ArgumentParser(description='VAE training for robot motion trajectories')
 parser.add_argument('--config_name', default=None, type=str, help='the path to save/load the model')
@@ -88,9 +89,9 @@ if __name__ == '__main__':
 
     dloader = DataLoader(dataset, batch_size=config_file['train_config']['batch_size'],
                          shuffle=True, num_workers=2)
-    dloader_iter = iter(dloader)
-    x = dloader_iter.next().to('cpu').numpy()
-    print('Input data is of shape: {}'.format(x.shape))
+    # dloader_iter = iter(dloader)
+    # x = dloader_iter.next().to('cpu').numpy()
+    # print('Input data is of shape: {}'.format(x.shape))
 
     # Init the model
     model = models.InfoGAN(config_file)
