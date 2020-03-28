@@ -55,8 +55,8 @@ config = {
 
         'train_config': {
                 'batch_size': 256,
-                'epochs': 150,
-                'snapshot': 20, 
+                'epochs': 2000,
+                'snapshot': 500,
                 'console_print': 1,
                 'optim_type': 'Adam',
                 'Goptim_lr_schedule': [(0, 2e-4)],

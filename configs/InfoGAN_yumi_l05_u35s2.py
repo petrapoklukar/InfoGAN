@@ -10,7 +10,7 @@ Created on Fri Mar 27 18:22:54 2020
 config = {
         'Gnet_config': {
                 'class_name': 'FullyConnectedGNet',
-                'latent_dim': 6,
+                'latent_dim': 37,
                 'linear_dims': [128, 256, 512],
                 'dropout': 0.3,
                 'output_dim': 7*79,
@@ -46,10 +46,10 @@ config = {
                 'input_size': 7*79,
                 'n_joints': 7,
                 'traj_length': 79,
-                'usual_noise_dim': 3, 
-                'structured_con_dim': 3,
+                'usual_noise_dim': 35, 
+                'structured_con_dim': 2,
                 'structured_cat_dim': None,
-                'total_noise': 6,
+                'total_noise': 37,
                 'path_to_data': 'dataset/robot_trajectories/yumi_joint_pose.npy',
                 },
 
@@ -79,7 +79,7 @@ config = {
                 'Snet_G_grad_clip': 100, 
                 'Qnet_G_grad_clip': 100, 
                 
-                'lambda_con': 1., 
+                'lambda_con': 0.5, 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,
