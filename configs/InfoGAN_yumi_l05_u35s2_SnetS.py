@@ -16,7 +16,7 @@ config = {
                 'output_dim': 7*79,
                 'output_reshape_dims': [-1, 7, 79],
                 'bias': True,
-                'out_activation': None
+                'out_activation': 'tanh'
                 },
         
         'Snet_config': {

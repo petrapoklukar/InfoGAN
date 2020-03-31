@@ -43,9 +43,11 @@ class FullyConnectedGNet(nn.Module):
                 )
         
         if config['out_activation'] == 'tanh': 
+            print(' *- Gnet: out_activation set to tanh')
             self.activation = nn.Tanh()
         else:
             self.activation = lambda x: x
+            print(' *- Gnet: out_activation set to None')
         
     def forward(self, *args):
         gen_input = torch.cat((*args), -1).view(-1, self.latent_dim)
