@@ -79,7 +79,7 @@ config = {
                 'Snet_G_grad_clip': 100, 
                 'Qnet_G_grad_clip': 100, 
                 
-                'lambda_con': 0.5, 
+                'lambda_con': 5, 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,
