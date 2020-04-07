@@ -19,12 +19,12 @@ import argparse
 import prd_score as prd
 
 parser = argparse.ArgumentParser(description='VAE training for robot motion trajectories')
-parser.add_argument('--config_name', default=None, type=str, help='the path to save/load the model')
-parser.add_argument('--train', default=0, type=int, help='set it to train the model')
-parser.add_argument('--chpnt_path', default='', type=str, help='set it to train the model')
-parser.add_argument('--eval', default=0, type=int, help='evaluates the trained model')
-parser.add_argument('--compute_prd', default=0, type=int, help='evaluates the trained model with precision and recall')
-parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
+# parser.add_argument('--config_name', default=None, type=str, help='the path to save/load the model')
+# parser.add_argument('--train', default=0, type=int, help='set it to train the model')
+# parser.add_argument('--chpnt_path', default='', type=str, help='set it to train the model')
+# parser.add_argument('--eval', default=0, type=int, help='evaluates the trained model')
+# parser.add_argument('--compute_prd', default=0, type=int, help='evaluates the trained model with precision and recall')
+# parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
 
 class TrajDataset(Dataset):
     def __init__(self, data_filename, device=None):
@@ -59,12 +59,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # Laptop TESTING
-    # args.config_name = 'InfoGAN_yumi_l05_u1s1_SnetS'
-    # args.train = 1
-    # args.chpnt_path = ''#'models/InfoGAN_MINST_testing/infogan_lastCheckpoint.pth'
-    # args.device = None
-    # args.eval = 0
-    # args.compute_prd = 0
+    args.config_name = 'InfoGAN_MINST_testing'
+    args.train = 1
+    args.chpnt_path = ''#'models/InfoGAN_MINST_testing/infogan_lastCheckpoint.pth'
+    args.device = None
+    args.eval = 1
+    args.compute_prd = 1
     
     # Load config
     config_file = os.path.join('.', 'configs', args.config_name + '.py')
@@ -90,8 +90,8 @@ if __name__ == '__main__':
     # Load the data 
     path_to_data = config_file['data_config']['path_to_data']
     # Laptop TESTING
-    # dataset = TrajDataset(path_to_data, device)[:10]
-    dataset = TrajDataset(path_to_data, device)
+    dataset = TrajDataset(path_to_data, device)[:256]
+    # dataset = TrajDataset(path_to_data, device)
 
     dloader = DataLoader(dataset, batch_size=config_file['train_config']['batch_size'],
                          shuffle=True, num_workers=2)
@@ -135,28 +135,29 @@ if __name__ == '__main__':
                 con_noise[:, con_noise_id] = fixed_con_noise
                 
                 # Generate an image
-                gen_x = model.Gnet((z_noise, con_noise)).detach()
+                gen_x = model.g_forward(z_noise, con_noise).detach()
                 filename = 'evalImages_fixcont{0}_r{1}'.format(str(con_noise_id),
                                             str(repeat))
                 model.plot_traj_grid(gen_x, filename, model.test_dir,
                                       n=n_con_samples)
                 
         # Fix usual noise variable
-        for con_noise_id in range(model.con_c_dim):
-            for repeat in range(n_con_repeats):
-                
-                # Sample the rest and keep the fixed one
-                _, con_noise = model.ginput_noise(n_con_samples)
-                z_noise = model.sample_fixed_noise(
-                    'normal', 1, noise_dim=model.z_dim)
-                z_noise = z_noise.expand(
-                    (n_con_samples, model.z_dim))
-                
-                # Generate an image
-                gen_x = model.Gnet((z_noise, con_noise)).detach()
-                filename = 'evalImages_fixusual_r{0}'.format(str(repeat))
-                model.plot_traj_grid(gen_x, filename, model.test_dir,
-                                      n=n_con_samples)
+        if config_file['data_config']['use_usual_noise']:
+            for con_noise_id in range(model.con_c_dim):
+                for repeat in range(n_con_repeats):
+                    
+                    # Sample the rest and keep the fixed one
+                    _, con_noise = model.ginput_noise(n_con_samples)
+                    z_noise = model.sample_fixed_noise(
+                        'normal', 1, noise_dim=model.z_dim)
+                    z_noise = z_noise.expand(
+                        (n_con_samples, model.z_dim))
+                    
+                    # Generate an image
+                    gen_x = model.g_forward(z_noise, con_noise).detach()
+                    filename = 'evalImages_fixusual_r{0}'.format(str(repeat))
+                    model.plot_traj_grid(gen_x, filename, model.test_dir,
+                                          n=n_con_samples)
         
         # Plot original
         test_dataset = TrajDataset(path_to_data, device)
@@ -189,7 +190,7 @@ if __name__ == '__main__':
         # Get the sampled np array
         with torch.no_grad():
             z_noise, con_noise = model.ginput_noise(n_prd_samples)
-            eval_data = model.Gnet((z_noise, con_noise))
+            eval_data = model.g_forward(z_noise, con_noise)
             eval_np = eval_data.cpu().numpy().reshape(n_prd_samples, -1)
      
         # Compute prd

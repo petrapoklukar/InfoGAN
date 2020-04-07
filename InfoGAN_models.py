@@ -28,14 +28,17 @@ class FullyConnectedGNet(nn.Module):
 
         self.lin = nn.Sequential(
                 nn.Linear(self.latent_dim, self.linear_dims[0], bias=self.bias),
+                nn.BatchNorm1d(self.linear_dims[0]),
                 nn.ReLU(),
                 nn.Dropout(p=self.dropout),
                 
                 nn.Linear(self.linear_dims[0], self.linear_dims[1], bias=self.bias),
+                nn.BatchNorm1d(self.linear_dims[1]),
                 nn.ReLU(),
                 nn.Dropout(p=self.dropout),
                 
                 nn.Linear(self.linear_dims[1], self.linear_dims[2], bias=self.bias),
+                nn.BatchNorm1d(self.linear_dims[2]),
                 nn.ReLU(),
                 nn.Dropout(p=self.dropout),
                 

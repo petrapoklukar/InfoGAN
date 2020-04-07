@@ -30,7 +30,6 @@ class InfoGAN(nn.Module):
         self.start_epoch = None
         self.snapshot = train_config['snapshot']
         self.console_print = train_config['console_print']
-        self.z_dim = config['data_config']['usual_noise_dim']
         self.input_noise = train_config['input_noise']
         self.input_variance_increase = train_config['input_variance_increase']
 
@@ -53,6 +52,7 @@ class InfoGAN(nn.Module):
         self.data_config = config['data_config']
         self.z_dim = self.data_config['usual_noise_dim']
         self.con_c_dim = self.data_config['structured_con_dim']
+        self.use_z_noise = self.data_config['use_usual_noise']
         self.fix_noise()
         self.lambda_con = train_config['lambda_con']
         
@@ -391,16 +391,25 @@ class InfoGAN(nn.Module):
     # --- Training functions --- #
     # -------------------------- #
     def d_forward(self, x):
-        """Forward pass through the discriminator"""
+        """Forward pass through the discriminator."""
         out_shared = self.Snet(x)
         out = self.Dnet(out_shared)
         return out
     
     def q_forward(self, x):
-        """Forward pass through the Qnet"""
+        """Forward pass through the Qnet."""
         out_shared = self.Snet(x)
         out = self.Qnet(out_shared)
         return out
+    
+    def g_forward(self, z_noise, con_noise):
+        """"Forward pass through the Gnet to allow different noise inputs."""
+        if self.use_z_noise:
+            out = self.Gnet((z_noise, con_noise))
+        else:
+            out = self.Gnet((con_noise, ))
+        return out
+        
     
     def ginput_noise(self, batch_size, batch_cat_c_dim=None):
         """
@@ -517,7 +526,7 @@ class InfoGAN(nn.Module):
                 
                 # Usual discriminator for fake images
                 z_noise, con_noise = self.ginput_noise(batch_size)
-                fake_x = self.Gnet((z_noise, con_noise)).detach() 
+                fake_x = self.g_forward(z_noise, con_noise).detach() 
                 assert torch.sum(torch.isnan(fake_x)) == 0, fake_x
                 fake_x_input = self.dinput_noise(fake_x.detach())
                 d_fake_x = self.d_forward(fake_x_input)
@@ -554,7 +563,7 @@ class InfoGAN(nn.Module):
                 
                 # Usual generator loss
                 z_noise, con_noise = self.ginput_noise(batch_size)
-                fake_x = self.Gnet(((z_noise, con_noise)))
+                fake_x = self.g_forward(z_noise, con_noise)
                 fake_x_input = self.dinput_noise(fake_x)
                 d_fake_x = self.d_forward(fake_x_input)
                 g_loss = self.bce_loss(d_fake_x, ones)
@@ -565,7 +574,7 @@ class InfoGAN(nn.Module):
                 z_noise, con_noise = self.ginput_noise(batch_size)
         
                 # - Push it through QNet
-                gen_x = self.Gnet((z_noise, con_noise))
+                gen_x = self.g_forward(z_noise, con_noise)
                 q_con_mean, q_con_logvar = self.q_forward(gen_x) 
         
                 G_i_loss = self.lambda_con * self.gaussian_loss(
@@ -641,7 +650,7 @@ class InfoGAN(nn.Module):
                 self.plot_snapshot_loss()
                 
             if (self.current_epoch + 1) % self.monitor_Gnet == 0:
-                gen_x = self.Gnet((self.fixed_z_noise, self.fixed_con_noise)) 
+                gen_x = self.g_forward(self.fixed_z_noise, self.fixed_con_noise) 
                 
                 filename = 'genTraj' + str(self.current_epoch)
                 self.plot_traj_grid(gen_x, filename, self.train_dir, n=9)

@@ -49,6 +49,7 @@ config = {
                 'usual_noise_dim': 3, 
                 'structured_con_dim': 3,
                 'structured_cat_dim': None,
+                'use_usual_noise': True,
                 'total_noise': 6,
                 'path_to_data': 'dataset/robot_trajectories/yumi_joint_pose.npy',
                 },
