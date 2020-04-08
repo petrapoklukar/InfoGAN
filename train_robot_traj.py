@@ -19,12 +19,12 @@ import argparse
 import prd_score as prd
 
 parser = argparse.ArgumentParser(description='VAE training for robot motion trajectories')
-# parser.add_argument('--config_name', default=None, type=str, help='the path to save/load the model')
-# parser.add_argument('--train', default=0, type=int, help='set it to train the model')
-# parser.add_argument('--chpnt_path', default='', type=str, help='set it to train the model')
-# parser.add_argument('--eval', default=0, type=int, help='evaluates the trained model')
-# parser.add_argument('--compute_prd', default=0, type=int, help='evaluates the trained model with precision and recall')
-# parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
+parser.add_argument('--config_name', default=None, type=str, help='the path to save/load the model')
+parser.add_argument('--train', default=0, type=int, help='set it to train the model')
+parser.add_argument('--chpnt_path', default='', type=str, help='set it to train the model')
+parser.add_argument('--eval', default=0, type=int, help='evaluates the trained model')
+parser.add_argument('--compute_prd', default=0, type=int, help='evaluates the trained model with precision and recall')
+parser.add_argument('--device', default=None, type=str, help='the device for training, cpu or cuda')
 
 class TrajDataset(Dataset):
     def __init__(self, data_filename, device=None):
@@ -59,12 +59,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # Laptop TESTING
-    args.config_name = 'InfoGAN_MINST_testing'
-    args.train = 1
-    args.chpnt_path = ''#'models/InfoGAN_MINST_testing/infogan_lastCheckpoint.pth'
-    args.device = None
-    args.eval = 1
-    args.compute_prd = 1
+    # args.config_name = 'InfoGAN_MINST_testing'
+    # args.train = 1
+    # args.chpnt_path = ''#'models/InfoGAN_MINST_testing/infogan_lastCheckpoint.pth'
+    # args.device = None
+    # args.eval = 1
+    # args.compute_prd = 1
     
     # Load config
     config_file = os.path.join('.', 'configs', args.config_name + '.py')
@@ -90,14 +90,11 @@ if __name__ == '__main__':
     # Load the data 
     path_to_data = config_file['data_config']['path_to_data']
     # Laptop TESTING
-    dataset = TrajDataset(path_to_data, device)[:256]
-    # dataset = TrajDataset(path_to_data, device)
+    # dataset = TrajDataset(path_to_data, device)[:256]
+    dataset = TrajDataset(path_to_data, device)
 
     dloader = DataLoader(dataset, batch_size=config_file['train_config']['batch_size'],
                          shuffle=True, num_workers=2)
-    # dloader_iter = iter(dloader)
-    # x = dloader_iter.next().to('cpu').numpy()
-    # print('Input data is of shape: {}'.format(x.shape))
 
     # Init the model
     model = models.InfoGAN(config_file)

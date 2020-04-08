@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Mar 24 10:28:35 2020
+Created on Wed Apr  8 11:54:29 2020
 
 @author: petrapoklukar
 """
-
 
 config = {
         'Gnet_config': {
@@ -56,8 +55,8 @@ config = {
 
         'train_config': {
                 'batch_size': 256,
-                'epochs': 50,
-                'snapshot': 5,
+                'epochs': 200,
+                'snapshot': 100,
                 'console_print': 1,
                 'optim_type': 'Adam',
                 'Goptim_lr_schedule': [(0, 2e-4)],
@@ -80,7 +79,7 @@ config = {
                 'Snet_G_grad_clip': 100, 
                 'Qnet_G_grad_clip': 100, 
                 
-                'lambda_con': 0.5, 
+                'lambda_con': 3.5, 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,

@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch
 import math
 import numpy as np
+from collections import OrderedDict
 
         
 # ---------------------------------------- #
@@ -27,35 +28,36 @@ class FullyConnectedGNet(nn.Module):
         self.bias = config['bias'] 
 
         self.lin = nn.Sequential(
-                nn.Linear(self.latent_dim, self.linear_dims[0], bias=self.bias),
-                nn.BatchNorm1d(self.linear_dims[0]),
-                nn.ReLU(),
-                nn.Dropout(p=self.dropout),
+            OrderedDict([
+                ('fc1', nn.Linear(self.latent_dim, self.linear_dims[0], bias=self.bias)),
+                ('bn1', nn.BatchNorm1d(self.linear_dims[0])),
+                ('r1', nn.ReLU()),
+                ('d1', nn.Dropout(p=self.dropout)),
+                    
+                ('fc2', nn.Linear(self.linear_dims[0], self.linear_dims[1], bias=self.bias)),
+                ('bn2', nn.BatchNorm1d(self.linear_dims[1])),
+                ('r2', nn.ReLU()),
+                ('d2', nn.Dropout(p=self.dropout)),
+                    
+                ('fc3', nn.Linear(self.linear_dims[1], self.linear_dims[2], bias=self.bias)),
+                ('bn3', nn.BatchNorm1d(self.linear_dims[2])),
+                ('r3', nn.ReLU()),
+                ('d3', nn.Dropout(p=self.dropout)),
                 
-                nn.Linear(self.linear_dims[0], self.linear_dims[1], bias=self.bias),
-                nn.BatchNorm1d(self.linear_dims[1]),
-                nn.ReLU(),
-                nn.Dropout(p=self.dropout),
-                
-                nn.Linear(self.linear_dims[1], self.linear_dims[2], bias=self.bias),
-                nn.BatchNorm1d(self.linear_dims[2]),
-                nn.ReLU(),
-                nn.Dropout(p=self.dropout),
-                
-                nn.Linear(self.linear_dims[2], self.output_dim, bias=self.bias),
-                )
+                ('fc4', nn.Linear(self.linear_dims[2], self.output_dim, bias=self.bias))
+            ]))
         
         if config['out_activation'] == 'tanh': 
             print(' *- Gnet: out_activation set to tanh')
-            self.activation = nn.Tanh()
-        else:
-            self.activation = lambda x: x
-            print(' *- Gnet: out_activation set to None')
+            self.lin.add_module('tanh', nn.Tanh())
+        # else:
+        #     self.activation = lambda x: x
+        #     print(' *- Gnet: out_activation set to None')
         
     def forward(self, *args):
         gen_input = torch.cat((*args), -1).view(-1, self.latent_dim)
         out_lin = self.lin(gen_input)
-        out_lin = self.activation(out_lin)
+        # out_lin = self.activation(out_lin)
         out = out_lin.reshape(self.output_reshape_dims)
         return out
     

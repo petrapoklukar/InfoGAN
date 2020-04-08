@@ -671,6 +671,7 @@ class InfoGAN(nn.Module):
                 'Dnet': self.Dnet.state_dict(),
                 'Qnet': self.Qnet.state_dict()}, 
                 self.model_path)       
+        self.convert_model_dict(self.Gnet.state_dict())
         self.save_logs()
         
     # ---------------------------------- #
@@ -870,6 +871,21 @@ class InfoGAN(nn.Module):
         self.Dnet.eval()
         self.Qnet.eval()
         assert(not self.Gnet.training)
+    
+    def convert_model_dict(self, model_dict, save=True):
+        """
+        Converts the Gnet model_dict's keys to be able to use it in the final 
+        RL policy training. 
+        """
+        new_model_dict = model_dict.copy()
+        for key in model_dict.keys():
+            temp_key = key.split(".")[1:]
+            new_key = '.'.join(temp_key)
+            new_model_dict[new_key] = new_model_dict.pop(key)
+        if save:
+            torch.save(new_model_dict, self.save_path + '_4RL_model.pt')
+
+        
 
 # --------------- #
 # --- Testing --- #

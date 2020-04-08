@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Mar 24 10:28:35 2020
+Created on Wed Apr  8 11:52:43 2020
 
 @author: petrapoklukar
 """
@@ -10,7 +10,7 @@ Created on Tue Mar 24 10:28:35 2020
 config = {
         'Gnet_config': {
                 'class_name': 'FullyConnectedGNet',
-                'latent_dim': 6,
+                'latent_dim': 3,
                 'linear_dims': [128, 256, 512],
                 'dropout': 0.3,
                 'output_dim': 7*79,
@@ -48,16 +48,16 @@ config = {
                 'traj_length': 79,
                 'usual_noise_dim': 1, 
                 'use_usual_noise': False,
-                'structured_con_dim': 6,
+                'structured_con_dim': 3,
                 'structured_cat_dim': None,
-                'total_noise': 6,
+                'total_noise': 3,
                 'path_to_data': 'dataset/robot_trajectories/yumi_joint_pose.npy',
                 },
 
         'train_config': {
                 'batch_size': 256,
-                'epochs': 50,
-                'snapshot': 5,
+                'epochs': 200,
+                'snapshot': 100,
                 'console_print': 1,
                 'optim_type': 'Adam',
                 'Goptim_lr_schedule': [(0, 2e-4)],
@@ -80,7 +80,7 @@ config = {
                 'Snet_G_grad_clip': 100, 
                 'Qnet_G_grad_clip': 100, 
                 
-                'lambda_con': 0.5, 
+                'lambda_con': 1.5, 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,
