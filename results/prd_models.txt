@@ -20,7 +20,3 @@ InfoGAN_yumi_l15_s3_SnetS
 InfoGAN_yumi_l35_s3_SnetS
 InfoGAN_yumi_l15_s6_SnetS
 InfoGAN_yumi_l35_s6_SnetS
-
-InfoGAN_yumi_l15_s2_SnetS
-InfoGAN_yumi_l15_s3_SnetS
-InfoGAN_yumi_l15_s6_SnetS
