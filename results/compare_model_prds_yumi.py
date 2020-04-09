@@ -83,12 +83,24 @@ def compare_prd(configs, baseline_indices=None, random_seed=1201):
         config_file['train_config']['device'] = device
         print('Device is: {}'.format(device))
     
-        # Init the model
+        # Load the trained model
         model = models.InfoGAN(config_file)
         eval_config = config_file['eval_config']
         eval_config['filepath'] = parent_dir + eval_config['filepath'].format(config_name)
         model.load_model(eval_config)
         print(eval_config)
+    
+        # Load the 999 chpt
+        model_chpt999 = models.InfoGAN(config_file)
+        model_chpt999.load_checkpoint(
+            '../models/{0}/infogan_checkpoint999.pth'.format(config_name))
+        model_chpt999.Gnet.eval()
+        
+        # Load the 1999 chpt
+        model_chpt1999 = models.InfoGAN(config_file)
+        model_chpt1999.load_checkpoint(
+            '../models/{0}/infogan_checkpoint1999.pth'.format(config_name))
+        model_chpt1999.Gnet.eval()
     
         # Number of samples to calculate PR on
         n_prd_samples = eval_config['n_prd_samples']
@@ -104,14 +116,24 @@ def compare_prd(configs, baseline_indices=None, random_seed=1201):
             z_noise, con_noise = model.ginput_noise(n_prd_samples)
             eval_data = model.g_forward(z_noise, con_noise)
             eval_np = eval_data.cpu().numpy().reshape(n_prd_samples, -1)
+            
+            z_noise, con_noise = model_chpt999.ginput_noise(n_prd_samples)
+            eval_chnpt999_data = model_chpt999.g_forward(z_noise, con_noise)
+            eval_chnpt999_np = eval_chnpt999_data.cpu().numpy().reshape(n_prd_samples, -1)
+            
+            z_noise, con_noise = model_chpt1999.ginput_noise(n_prd_samples)
+            eval_chnpt1999_data = model_chpt1999.g_forward(z_noise, con_noise)
+            eval_chnpt1999_np = eval_chnpt1999_data.cpu().numpy().reshape(n_prd_samples, -1)
         
         # Compute and save prd 
         prd_data = prd.compute_prd_from_embedding(eval_np, ref_np)
-        prd_scores.append(prd_data)
-        prd_models.append(config_name)
+        prd_chnpt999_data = prd.compute_prd_from_embedding(eval_chnpt999_np, ref_np)
+        prd_chnpt1999_data = prd.compute_prd_from_embedding(eval_chnpt1999_np, ref_np)
+        prd_scores += [prd_data, prd_chnpt999_data, prd_chnpt1999_data]
+        prd_models += [config_name, config_name + '_chpnt999', config_name + '_chpnt1999']
     
     short_model_names = ['_'.join(prd_models[i].split('_')[-3:]) for i in range(len(prd_models))]
-    plot_name = 'yumi_fixedBaseline{}_seed_{}prds.png'.format(
+    plot_name = '{}_yumi_fixedBaseline{}_seed_{}prds.png'.format(config_name,
         int(0 if baseline_indices is None else 1), random_seed)
     prd.plot(prd_scores, short_model_names, out_path=plot_name)
     
@@ -123,8 +145,10 @@ if __name__ == '__main__':
     base = np.random.choice(max_ind, n_points, replace=False)
     
     yumi_models = get_model_names()
+    yumi_models = [yumi_models[2]]
     
-    compare_prd(yumi_models, baseline_indices=None, random_seed=1112)
+    
+    # compare_prd(yumi_models, baseline_indices=None, random_seed=1112)
     compare_prd(yumi_models, baseline_indices=base, random_seed=1112)
     # compare_prd('continuous', continuous_models, baseline_indices=None)
     # compare_prd('continuous', continuous_models, baseline_indices=base)

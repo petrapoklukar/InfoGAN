@@ -55,8 +55,8 @@ config = {
 
         'train_config': {
                 'batch_size': 256,
-                'epochs': 5000,
-                'snapshot': 1000,
+                'epochs': 1000,
+                'snapshot': 100,
                 'console_print': 1,
                 'optim_type': 'Adam',
                 'Goptim_lr_schedule': [(0, 2e-4)],
@@ -69,7 +69,7 @@ config = {
                 'input_noise': False,
                 'input_variance_increase': None, 
                 'Dnet_update_step': 1, 
-                'monitor_Gnet': 5, 
+                'monitor_Gnet': 100, 
                 'Gnet_progress_nimg': 9,
                 
                 'grad_clip': True, 
