@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Mar 24 10:28:35 2020
+Created on Wed Apr 15 11:02:07 2020
 
 @author: petrapoklukar
 """
@@ -10,7 +10,7 @@ Created on Tue Mar 24 10:28:35 2020
 config = {
         'Gnet_config': {
                 'class_name': 'FullyConnectedGNet',
-                'latent_dim': 6,
+                'latent_dim': 2,
                 'linear_dims': [128, 256, 512],
                 'dropout': 0.3,
                 'output_dim': 7*79,
@@ -48,15 +48,15 @@ config = {
                 'traj_length': 79,
                 'usual_noise_dim': 1, 
                 'use_usual_noise': False,
-                'structured_con_dim': 6,
+                'structured_con_dim': 2,
                 'structured_cat_dim': None,
-                'total_noise': 6,
+                'total_noise': 2,
                 'path_to_data': 'dataset/robot_trajectories/yumi_joint_pose.npy',
                 },
 
         'train_config': {
                 'batch_size': 256,
-                'epochs': 50,
+                'epochs': 20,
                 'snapshot': 5,
                 'console_print': 1,
                 'optim_type': 'Adam',
@@ -70,7 +70,7 @@ config = {
                 'input_noise': False,
                 'input_variance_increase': None, 
                 'Dnet_update_step': 1, 
-                'monitor_Gnet': 5, 
+                'monitor_Gnet': 100, 
                 'Gnet_progress_nimg': 9,
                 
                 'grad_clip': True, 
@@ -80,7 +80,7 @@ config = {
                 'Snet_G_grad_clip': 100, 
                 'Qnet_G_grad_clip': 100, 
                 
-                'lambda_con': 0.5, 
+                'lambda_con': 0.1, 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,
@@ -93,6 +93,8 @@ config = {
                 'n_con_test_samples': 9,
                 'n_con_repeats': 3,
                 'con_var_range': 2,
-                'n_prd_samples': 1000
+                'n_prd_samples': 1000,
+                'compute_chpnt_prds': True,
+                'chnpt_list': ['4', '9', '14', '19']
                 }
         }

@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Apr  8 11:55:10 2020
+Created on Wed Apr 15 11:02:55 2020
 
 @author: petrapoklukar
 """
 
-
 config = {
         'Gnet_config': {
                 'class_name': 'FullyConnectedGNet',
-                'latent_dim': 2,
+                'latent_dim': 6,
                 'linear_dims': [128, 256, 512],
                 'dropout': 0.3,
                 'output_dim': 7*79,
@@ -48,9 +47,9 @@ config = {
                 'traj_length': 79,
                 'usual_noise_dim': 1, 
                 'use_usual_noise': False,
-                'structured_con_dim': 2,
+                'structured_con_dim': 6,
                 'structured_cat_dim': None,
-                'total_noise': 2,
+                'total_noise': 6,
                 'path_to_data': 'dataset/robot_trajectories/yumi_joint_pose.npy',
                 },
 
@@ -80,7 +79,7 @@ config = {
                 'Snet_G_grad_clip': 100, 
                 'Qnet_G_grad_clip': 100, 
                 
-                'lambda_con': 1.5, 
+                'lambda_con': 0.1, 
                 
                 'filename': 'infogan',
                 'random_seed': 1201,

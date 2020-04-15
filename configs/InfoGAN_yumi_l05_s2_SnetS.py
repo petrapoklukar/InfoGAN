@@ -93,6 +93,8 @@ config = {
                 'n_con_test_samples': 9,
                 'n_con_repeats': 3,
                 'con_var_range': 2,
-                'n_prd_samples': 1000
+                'n_prd_samples': 1000,
+                'compute_chpnt_prds': True,
+                'chnpt_list': [str(i) for i in range(99, 1000, 100)]
                 }
         }

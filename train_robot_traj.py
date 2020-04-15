@@ -169,6 +169,10 @@ if __name__ == '__main__':
     if args.compute_prd:
         eval_config = config_file['eval_config']
         eval_config['filepath'] = eval_config['filepath'].format(args.config_name)
+
+        compute_chpnt_prds = eval_config['compute_chpnt_prds']
+        chnpt_list = eval_config['chnpt_list']
+        
         print(eval_config)
         if not args.train:
             model.load_model(eval_config)
@@ -190,10 +194,39 @@ if __name__ == '__main__':
             eval_data = model.g_forward(z_noise, con_noise)
             eval_np = eval_data.cpu().numpy().reshape(n_prd_samples, -1)
      
-        # Compute prd
         prd_data = prd.compute_prd_from_embedding(eval_np, ref_np)
-        prd.plot([prd_data], [args.config_name], 
-                 out_path='models/{0}/prd.png'.format(args.config_name))
+        
+        # Only evaluate the last model
+        if not compute_chpnt_prds:
+            # Compute prd
+            prd.plot([prd_data], [args.config_name], 
+                     out_path='models/{0}/prd.png'.format(args.config_name))
+        
+        # Evaluate the intermediate checkponts 
+        else:
+            # Load the chpt
+            chpr_prd_list = []
+            for c in chnpt_list:
+                model_chpt = models.InfoGAN(config_file)
+                model_chpt.load_checkpoint(
+                    'models/{0}/infogan_checkpoint{1}.pth'.format(args.config_name, c))
+                model_chpt.Gnet.eval()
+                
+                with torch.no_grad():
+                    z_noise, con_noise = model_chpt.ginput_noise(n_prd_samples)
+                    eval_chnpt_data = model_chpt.g_forward(z_noise, con_noise)
+                    eval_chnpt_np = eval_chnpt_data.cpu().numpy().reshape(n_prd_samples, -1)
+                
+                prd_chnpt_data = prd.compute_prd_from_embedding(eval_chnpt_np, ref_np)
+                chpr_prd_list.append(prd_chnpt_data)
+            
+            # Compute and save prd 
+            short_model_name = '_'.join(args.config_name.split('_')[-3:])
+            all_prd_data = [prd_data] + chpr_prd_list
+            all_names = [short_model_name] + chnpt_list
+            prd.plot(all_prd_data, all_names,
+                     out_path='models/{0}/prd_chpnts.png'.format(args.config_name))
+        
 
         
         
