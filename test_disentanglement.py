@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 sys.path.insert(0,'..')
+import pickle
 
 class FullyConnecteDecoder(nn.Module):
     def __init__(self, input_size, output_size):
@@ -86,7 +87,49 @@ def sample_latent_codes(ld, n_samples, ntype='equidistant', device='cpu'):
         latent_codes_dict[str(dim)] = codes
     return latent_codes_dict
         
+
+def load_simulation_state_dict(model_name, fignum=1):
+    """
+    path_to_data: e.g. 'dataset/simulation_states/gan2/'
+    """
+    path_to_data = 'dataset/simulation_states/{0}/{0}.pkl'.format(model_name)
+    with open(path_to_data, 'rb') as f:
+        states_dict = pickle.load(f)
     
+    ld = states_dict['0'].shape[1]
+    state_names = ['x', 'y', 'theta']
+    
+    for fixed_fac in list(states_dict.keys()):
+        plt.figure(fixed_fac, figsize=(10, 10))
+        plt.clf()
+        plt.suptitle(path_to_data.split('/')[-2] + ' with fixed {0} dim'.format(fixed_fac))
+        for i in range(ld):
+            plt.subplot(ld, 1, i + 1)
+            plt.hist(states_dict[fixed_fac][:, i], bins=50, 
+                     label='Std: ' + str(round(np.std(states_dict[fixed_fac][:, i]), 2)))
+            plt.legend()
+            plt.title(state_names[i])
+        plt.subplots_adjust(hspace=0.5)
+        plt.show()
+    
+    
+def compute_mmd(sample1, sample2, alpha):
+    
+    bs = sample1.shape[1]
+    xx = torch.mm(sample1, sample1.t())
+    yy = torch.mm(sample2, sample2.t())
+    zz = torch.mm(sample1, sample2.t())
+    
+    rx = (xx.diag().unsqueeze(0).expand_as(xx))
+    ry = (yy.diag().unsqueeze(0).expand_as(yy))
+    
+    K = torch.exp(- alpha * (rx.t() + rx - 2*xx))
+    L = torch.exp(- alpha * (ry.t() + ry - 2*yy))
+    P = torch.exp(- alpha * (rx.t() + ry - 2*zz))
+    
+    beta = (1./(bs * (bs)))
+    gamma = (2./(bs * bs)) 
+    return beta * (torch.sum(K)+torch.sum(L)) - gamma * torch.sum(P)
     
 def load_simulation_states(path_to_data, fignum=1):
     """
