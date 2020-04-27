@@ -113,6 +113,39 @@ def load_simulation_state_dict(model_name, fignum=1):
             plt.title(state_names[i])
         plt.subplots_adjust(hspace=0.5)
         plt.show()
+        
+        
+def create_fake_training_data():
+    path_to_data = 'dataset/simulation_states/vae5/vae5.pkl'
+    with open(path_to_data, 'rb') as f:
+        states_dict = pickle.load(f)
+    # fake_x = np.mean(np.array([states_dict['0'][:, 0], states_dict['2'][:, 0]]),
+    #                   axis=0).reshape(-1, 1)
+    # fake_y = np.mean(np.array([states_dict['0'][:, 1], states_dict['1'][:, 1]]), 
+    #                   axis=0).reshape(-1, 1)
+    # fake_theta = np.mean(np.array([states_dict['2'][:, 2], states_dict['1'][:, 2]]), 
+    #                   axis=0).reshape(-1, 1)
+    fake_x = np.array([states_dict['0'][:, 0], states_dict['2'][:, 0]]).reshape(-1, 1)
+    fake_y = np.array([states_dict['0'][:, 1], states_dict['1'][:, 1]]).reshape(-1, 1)
+    fake_theta = np.array([states_dict['2'][:, 2], states_dict['1'][:, 2]]).reshape(-1, 1)
+    # fake_x = states_dict['0'][:, 0].reshape(-1, 1)
+    # fake_y = states_dict['0'][:, 1].reshape(-1, 1)
+    # fake_theta = states_dict['2'][:, 2].reshape(-1, 1)
+    fake_data = np.concatenate((fake_x, fake_y, fake_theta), axis=1)
+    
+    state_names = ['x', 'y', 'theta']
+    plt.figure(1, figsize=(10, 10))
+    plt.clf()
+    plt.suptitle('Fake training data')
+    for i in range(3):
+        plt.subplot(3, 1, i + 1)
+        plt.hist(fake_data[:, i], bins=50)
+        plt.legend()
+        plt.title(state_names[i])
+    plt.subplots_adjust(hspace=0.5)
+    plt.show()
+    return fake_data
+    
     
     
 def compute_mmd(sample1, sample2, alpha):
@@ -181,3 +214,15 @@ if __name__ == '__main___':
     
     for i in range(len(model_names)):
         load_simulation_states(model_names[i], fignum=i)
+    
+    fake_data = create_fake_training_data()
+    for key in states_dict.keys():
+        print('Fixed latent dim ', key)
+        sample1 = torch.from_numpy(states_dict[key])#.reshape(-1, 1))
+        sample2 = torch.from_numpy(fake_data)#.reshape(-1, 1))
+        rand_rows1 = torch.randperm(sample1.size(0))[:2000]
+        rand_rows2 = torch.randperm(sample2.size(0))[:2000]
+        for i in range(sample1.size(-1)):
+            print(compute_mmd(sample1[rand_rows1, i].reshape(-1, 1), 
+                              sample2[rand_rows2, i].reshape(-1, 1), alpha=1))
+            
