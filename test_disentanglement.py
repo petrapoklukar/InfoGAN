@@ -57,7 +57,7 @@ def load_generative_model(ld, path_to_model, device):
                 'Generative model {0} not recognized'.format(path_to_model))
         
 
-def sample_fixed_noise(ntype, n_samples, noise_dim=None, var_range=1, device='cpu'):
+def sample_fixed_noise(ntype, n_samples, noise_dim, var_range=1, device='cpu'):
         """Samples one type of noise only"""
         if ntype == 'uniform':
             return torch.empty((n_samples, noise_dim), 
@@ -72,16 +72,18 @@ def sample_fixed_noise(ntype, n_samples, noise_dim=None, var_range=1, device='cp
             raise ValueError('Noise type {0} not recognised.'.format(ntype))
             
             
-def sample_latent_codes(ld, n_samples, ntype='equidistant', device='cpu'):
+def sample_latent_codes(ld, n_samples, dgm_type, ntype='equidistant', device='cpu'):
     """
     """
     n_equidistant_pnts = 4
     n_repeats = n_samples / (n_equidistant_pnts + 1)
     latent_codes_dict = {}
+    noise_type = 'normal' if dgm_type == 'vae' else 'uniform'
     
     for dim in range(ld):
-        codes = sample_fixed_noise('normal', n_samples, noise_dim=ld)
-        fixed_n_range = sample_fixed_noise(ntype, n_equidistant_pnts, var_range=1.5)
+        codes = sample_fixed_noise(noise_type, n_samples, noise_dim=ld)
+        fixed_n_range = sample_fixed_noise(ntype, n_equidistant_pnts, 
+                                           noise_dim=None, var_range=1.5)
         fixed_n = np.repeat(fixed_n_range, n_repeats)
         codes[:, dim] = fixed_n
         latent_codes_dict[str(dim)] = codes
@@ -114,23 +116,42 @@ def load_simulation_state_dict(model_name, fignum=1):
     
     
 def compute_mmd(sample1, sample2, alpha):
+    """
+    Computes MMD for samples of the same size bs x n_features using Gaussian
+    kernel.
     
-    bs = sample1.shape[1]
+    See Equation (3) in http://www.jmlr.org/papers/volume13/gretton12a/gretton12a.pdf
+    for the exact formula.
+    """
+    # Get number of samples (assuming m == n)
+    m = sample1.shape[0]
+    
+    # Calculate pairwise products for each sample (each row). This yields
+    # 2-norms |xi|^2 on the diagonal and <xi, xj> on non diagonal
     xx = torch.mm(sample1, sample1.t())
     yy = torch.mm(sample2, sample2.t())
     zz = torch.mm(sample1, sample2.t())
     
+    # Expand the norms of samples into the original size
     rx = (xx.diag().unsqueeze(0).expand_as(xx))
     ry = (yy.diag().unsqueeze(0).expand_as(yy))
     
-    K = torch.exp(- alpha * (rx.t() + rx - 2*xx))
-    L = torch.exp(- alpha * (ry.t() + ry - 2*yy))
-    P = torch.exp(- alpha * (rx.t() + ry - 2*zz))
+    # Remove the diagonal elements, the non diagonal are exactly |xi - xj|^2
+    # = <xi, xi> + <xj, xj> - 2<xi, xj> = |xi|^2 + |xj|^2 - 2<xi, xj>
+    kernel_samples1 = torch.exp(- alpha * (rx.t() + rx - 2*xx))
+    kernel_samples2 = torch.exp(- alpha * (ry.t() + ry - 2*yy))
+    kernel_samples12 = torch.exp(- alpha * (rx.t() + ry - 2*zz))
     
-    beta = (1./(bs * (bs)))
-    gamma = (2./(bs * bs)) 
-    return beta * (torch.sum(K)+torch.sum(L)) - gamma * torch.sum(P)
+    # Normalisations
+    n_same = (1./(m * (m-1)))
+    n_mixed = (2./(m * m)) 
     
+    term1 = n_same * torch.sum(kernel_samples1)
+    term2 = n_same * torch.sum(kernel_samples2)
+    term3 = n_mixed * torch.sum(kernel_samples12)
+    return term1 + term2 - term3
+    
+
 def load_simulation_states(path_to_data, fignum=1):
     """
     path_to_data: e.g. 'dataset/simulation_states/gan2/'
