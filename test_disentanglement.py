@@ -89,6 +89,7 @@ def sample_latent_codes(ld, n_samples, dgm_type, ntype='equidistant', device='cp
         fixed_n = np.repeat(fixed_val, n_samples)
         codes[:, dim] = fixed_n
         latent_codes_dict[str(dim)] = codes
+    latent_codes_dict['-1'] = sample_fixed_noise(noise_type, n_samples, noise_dim=ld)
     return latent_codes_dict
 
 
@@ -223,7 +224,7 @@ if __name__ == '__main___':
         
     gt_data = np.load('dataset/simulation_states/yumi_states.npy')
     gts_data = gt_data[:, (0, 1, -1)]
-    model_data = load_simulation_state_dict('gan3')
+    model_data = load_simulation_state_dict('gan6')
     
     # Plot GT data    
     plt.figure(50)
@@ -257,6 +258,6 @@ if __name__ == '__main___':
         rand_rows1 = torch.randperm(sample1.size(0))[:5000]
         rand_rows2 = torch.randperm(sample1.size(0))[:5000]
         for i in range(sample1.size(-1)):
-            print(compute_mmd(sample1[rand_rows1, i].reshape(-1, 1), 
+            print(compute_mmd(sample1[:5000, i].reshape(-1, 1), 
                               sample2[rand_rows2, i].reshape(-1, 1), alpha=2))
             
