@@ -100,7 +100,7 @@ def load_simulation_state_dict(model_name, fignum=1):
     """
     path_to_data: e.g. 'dataset/simulation_states/gan2/'
     """
-    path_to_data = 'dataset/simulation_states/{0}/{0}.pkl'.format(model_name)
+    path_to_data = 'dataset/simulation_states/{0}/fv_{0}.pkl'.format(model_name)
     with open(path_to_data, 'rb') as f:
         states_dict = pickle.load(f)
     
@@ -224,7 +224,7 @@ if __name__ == '__main___':
         
     gt_data = np.load('dataset/simulation_states/yumi_states.npy')
     gts_data = gt_data[:, (0, 1, -1)]
-    model_data = load_simulation_state_dict('gan6')
+    model_data = load_simulation_state_dict('vae8')
     
     # Plot GT data    
     plt.figure(50)
@@ -250,14 +250,58 @@ if __name__ == '__main___':
     plt.show()
     
     
+    # Manual correction
+    model_data_corr = model_data.copy()
+    pairs = [('2', 1), ('0', 2), ('1', 0)]
+    for p in pairs:
+        temp3 = model_data[p[0]][:5000, p[1]]
+        temp1 = model_data[p[0]][torch.randperm(10000)[:5000], :]
+        temp1[:, p[1]] = temp3
+        model_data_corr[p[0]] = temp1
 
+    ld = 3
+    for fixed_fac in list(model_data_corr.keys()):
+        plt.figure(fixed_fac, figsize=(10, 10))
+        plt.clf()
+        for i in range(ld):
+            plt.subplot(ld, 1, i + 1)
+            plt.hist(model_data_corr[fixed_fac][:, i], bins=50)
+            plt.legend()
+            
+        plt.subplots_adjust(hspace=0.5)
+        plt.show()
+    
+    
     for key in model_data.keys():
         print('Fixed latent dim ', key)
-        sample1 = torch.from_numpy(model_data[key])#.reshape(-1, 1))
+        sample1 = torch.from_numpy(model_data[key])
         sample2 = torch.from_numpy(gts_data)#.reshape(-1, 1))
         rand_rows1 = torch.randperm(sample1.size(0))[:5000]
-        rand_rows2 = torch.randperm(sample1.size(0))[:5000]
+        rand_rows2 = torch.randperm(sample2.size(0))[:5000]
+        
+        
+        inter_mmd_list = []
         for i in range(sample1.size(-1)):
-            print(compute_mmd(sample1[:5000, i].reshape(-1, 1), 
-                              sample2[rand_rows2, i].reshape(-1, 1), alpha=2))
+            # mmd = compute_mmd(sample1[:, i].reshape(-1, 1), 
+            #                   sample2[rand_rows2, i].reshape(-1, 1), alpha=2)
+            mmd = compute_mmd(sample1[rand_rows1, i].reshape(-1, 1), 
+                              sample2[rand_rows2, i].reshape(-1, 1), alpha=2)
+            inter_mmd_list.append(mmd.numpy())
+            print(mmd)
+        
+        key_max_mmd = max(inter_mmd_list)
+        key_max_mmd_dim = inter_mmd_list.index(key_max_mmd)
+        key_score = max(list(map(lambda x: (key_max_mmd-x)/key_max_mmd, inter_mmd_list)))
+        # np.max((inter_mmd_list - key_max_mmd)/key_max_mmd)
+        print('\n', (key, key_score, key_max_mmd_dim))
+
+    # for key in model_data.keys():
+    #     print('Fixed latent dim ', key)
+    #     sample1 = torch.from_numpy(model_data[key])#.reshape(-1, 1))
+    #     sample2 = torch.from_numpy(gts_data)#.reshape(-1, 1))
+    #     rand_rows1 = torch.randperm(sample1.size(0))[:5000]
+    #     rand_rows2 = torch.randperm(sample1.size(0))[:5000]
+    #     for i in range(sample1.size(-1)):
+    #         print(compute_mmd(sample1[:5000, i].reshape(-1, 1), 
+    #                           sample2[rand_rows2, i].reshape(-1, 1), alpha=2))
             
