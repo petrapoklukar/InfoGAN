@@ -82,12 +82,17 @@ def sample_latent_codes(ld, n_samples, dgm_type, ntype='equidistant', device='cp
     
     for dim in range(ld):
         codes = sample_fixed_noise(noise_type, n_samples, noise_dim=ld)
-        fixed_n_range = sample_fixed_noise(ntype, n_equidistant_pnts, 
-                                           noise_dim=None, var_range=1.5)
-        fixed_n = np.repeat(fixed_n_range, n_repeats)
+        # fixed_n_range = sample_fixed_noise(ntype, n_equidistant_pnts, 
+        #                                    noise_dim=None, var_range=1.5)
+        # fixed_n = np.repeat(fixed_n_range, n_repeats)
+        fixed_val = sample_fixed_noise(noise_type, 1, noise_dim=1)
+        fixed_n = np.repeat(fixed_val, n_samples)
         codes[:, dim] = fixed_n
         latent_codes_dict[str(dim)] = codes
     return latent_codes_dict
+
+
+
         
 
 def load_simulation_state_dict(model_name, fignum=1):
@@ -113,6 +118,7 @@ def load_simulation_state_dict(model_name, fignum=1):
             plt.title(state_names[i])
         plt.subplots_adjust(hspace=0.5)
         plt.show()
+    return states_dict
         
         
 def create_fake_training_data():
@@ -139,7 +145,7 @@ def create_fake_training_data():
     plt.suptitle('Fake training data')
     for i in range(3):
         plt.subplot(3, 1, i + 1)
-        plt.hist(fake_data[:, i], bins=50)
+        plt.hist(fake_data[:, i], bins=1000)
         plt.legend()
         plt.title(state_names[i])
     plt.subplots_adjust(hspace=0.5)
@@ -214,15 +220,43 @@ if __name__ == '__main___':
     
     for i in range(len(model_names)):
         load_simulation_states(model_names[i], fignum=i)
+        
+    gt_data = np.load('dataset/simulation_states/yumi_states.npy')
+    gts_data = gt_data[:, (0, 1, -1)]
+    model_data = load_simulation_state_dict('gan3')
     
-    fake_data = create_fake_training_data()
-    for key in states_dict.keys():
+    # Plot GT data    
+    plt.figure(50)
+    plt.clf()
+    for i in range(6):
+        plt.subplot(6, 1, i+1)
+        plt.hist(gt_data[:, i], bins=50)
+    plt.show()
+    
+    plt.clf()
+    plt.subplot(3, 1, 1)
+    plt.hist(gt_data[:, 0], bins=50)
+    plt.title('X')
+    
+    plt.subplot(3, 1, 2)
+    plt.hist(gt_data[:, 1], bins=50)
+    plt.title('Y')
+    
+    plt.subplot(3, 1, 3)
+    plt.hist(gt_data[:, -1], bins=50)
+    plt.title('Theta')
+    
+    plt.show()
+    
+    
+
+    for key in model_data.keys():
         print('Fixed latent dim ', key)
-        sample1 = torch.from_numpy(states_dict[key])#.reshape(-1, 1))
-        sample2 = torch.from_numpy(fake_data)#.reshape(-1, 1))
-        rand_rows1 = torch.randperm(sample1.size(0))[:2000]
-        rand_rows2 = torch.randperm(sample2.size(0))[:2000]
+        sample1 = torch.from_numpy(model_data[key])#.reshape(-1, 1))
+        sample2 = torch.from_numpy(gts_data)#.reshape(-1, 1))
+        rand_rows1 = torch.randperm(sample1.size(0))[:5000]
+        rand_rows2 = torch.randperm(sample1.size(0))[:5000]
         for i in range(sample1.size(-1)):
             print(compute_mmd(sample1[rand_rows1, i].reshape(-1, 1), 
-                              sample2[rand_rows2, i].reshape(-1, 1), alpha=1))
+                              sample2[rand_rows2, i].reshape(-1, 1), alpha=2))
             
