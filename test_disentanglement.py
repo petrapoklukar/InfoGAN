@@ -14,6 +14,7 @@ import sys
 sys.path.insert(0,'..')
 import pickle
 from scipy import stats
+import heapq
 
 class FullyConnecteDecoder(nn.Module):
     def __init__(self, input_size, output_size):
@@ -99,20 +100,21 @@ def sample_latent_codes(ld, n_samples, dgm_type, ntype='equidistant', device='cp
     return latent_codes_dict
 
 
-def load_simulation_state_dict(model_name, fignum=1, plot=True):
+def load_simulation_state_dict(file_name, fignum=1, plot=True):
     """
     path_to_data: e.g. 'dataset/simulation_states/gan2/'
     """
-    path_to_data = 'dataset/simulation_states/{0}/{0}.pkl'.format(model_name)
+    path_to_data = 'dataset/simulation_states/{0}.pkl'.format(file_name)
     with open(path_to_data, 'rb') as f:
         states_dict = pickle.load(f)
     
     # ld = states_dict['0'].shape[1]
     state_list = [0, 1, -1]
     state_names = ['x', 'y', 'theta']
-    
+    keys_list = list(states_dict.keys())
+    keys_list.remove('info')
     if plot:
-        for fixed_fac in list(states_dict.keys()):
+        for fixed_fac in keys_list:
             plt.figure(fixed_fac, figsize=(10, 10))
             plt.clf()
             plt.suptitle(path_to_data.split('/')[-2] + ' with fixed {0} dim'.format(fixed_fac))
@@ -165,7 +167,8 @@ def compute_mmd(sample1, sample2, alpha):
     return term1 + term2 - term3
     
 
-def compute_ks_test(model_data, gts_data, n_samples=2000, p_value=0.01):
+def compute_ks_test(model_data, gts_data, n_sub_samples=2000, p_value=0.01,
+                    n_inter=4, n_inter_samples=2000):
     """
     Computes the Kolmogorov-Smirnov two sample test with a given pvalue.
     
@@ -176,29 +179,31 @@ def compute_ks_test(model_data, gts_data, n_samples=2000, p_value=0.01):
     Critical values are obtained from Wikipedia 
     https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test.
     """    
-    critical_val_dict = {0.01: 1.628*np.sqrt(2/n_samples), 
-                         0.05: 1.358*np.sqrt(2/n_samples), 
-                         0.005: 1.731*np.sqrt(2/n_samples), 
-                         0.001: 1.949*np.sqrt(2/n_samples)}
+    critical_val_dict = {0.01: 1.628*np.sqrt(2/n_sub_samples), 
+                         0.05: 1.358*np.sqrt(2/n_sub_samples), 
+                         0.005: 1.731*np.sqrt(2/n_sub_samples), 
+                         0.001: 1.949*np.sqrt(2/n_sub_samples)}
     c_val = critical_val_dict[p_value]
+    assert(n_sub_samples <= n_inter_samples)
     
     n_factors = 3
     res_dict = {key: {factor: [] for factor in range(n_factors)} for key in model_data.keys()}
-    for e in range(5):
-        for key in model_data.keys():
+    for e in range(n_inter + 1):
+        for key in [k for k in model_data.keys() if k !='info']:
             # Result factors corresponding to each intervention in the latent space
-            sample1 = torch.from_numpy(model_data[key])[e*n_samples:(e+1)*n_samples, (0, 1, -1)]
+            sample1 = torch.from_numpy(model_data[key])[e*n_inter_samples:(e+1)*n_inter_samples, (0, 1, -1)]
+            rand_rows1 = torch.randperm(sample1.size(0))[:n_sub_samples]
             
             # Sample the same amount of ground truth data
             sample2 = torch.from_numpy(gts_data)
-            rand_rows2 = torch.randperm(sample2.size(0))[:n_samples]
+            rand_rows2 = torch.randperm(sample2.size(0))[:n_sub_samples]
             
             # factor is either X, Y or theta
             for factor in range(sample1.size(-1)):
-                assert(sample1[:, factor].shape == sample2[rand_rows2, factor].shape )
+                assert(sample1[rand_rows1, factor].shape == sample2[rand_rows2, factor].shape )
                 
                 # KS test if the generated factor distribution is the same as gt one
-                ks = stats.ks_2samp(sample1[:, factor], sample2[rand_rows2, factor])
+                ks = stats.ks_2samp(sample1[rand_rows1, factor], sample2[rand_rows2, factor])
                 
                 # If small enough p-value as well as big enough statistics, reject null hypothesis
                 if ks.pvalue < p_value and ks.statistic > c_val:
@@ -230,14 +235,15 @@ def compute_ks_test(model_data, gts_data, n_samples=2000, p_value=0.01):
             key_ks_max_factor = key_ks_max[1]
             key_score = 1.0
         else: 
-            res_agg_dict[key] = 'not significant'
+            # res_agg_dict[key] = 'not significant'
             continue
-        res_agg_dict[key] = (key_ks_max_factor, round(key_ks_max[0], 2), key_score)
+        res_agg_dict[key] = (key_ks_max_factor, round(key_ks_max[0], 5), key_score)
         
     return res_dict, res_agg_dict, res_agg2_dict
 
 
-def compute_mmd_test(model_data, gts_data, n_samples=100, p_value=0.005):
+def compute_mmd_test(model_data, gts_data, n_sub_samples=100, p_value=0.005, 
+                     n_inter=4, n_inter_samples=2000):
     """
     Computes the Maximum Mean Discrepancy using exponential kernel with 
     hyperparameter alpha. 
@@ -249,20 +255,22 @@ def compute_mmd_test(model_data, gts_data, n_samples=100, p_value=0.005):
     Critical value is obtained by performing a permutation test 100x and 
     setting it to (1 - p_value)-quantile.
     """    
+    assert(n_sub_samples <= n_inter_samples)
     n_factors = 3
     res_dict = {key: {factor: [] for factor in range(n_factors)} for key in model_data.keys()}
-    for e in range(5):
-        for key in model_data.keys():
+    for e in range(n_inter + 1):
+        for key in [k for k in model_data.keys() if k !='info']:
+            
             # Result factors corresponding to each intervention in the latent space
-            sample1 = torch.from_numpy(model_data[key])[e*2000:(e+1)*2000, (0, 1, -1)]
-            rand_rows1 = torch.randperm(sample1.size(0))[:n_samples]
+            sample1 = torch.from_numpy(model_data[key])[e*n_inter_samples:(e+1)*n_inter_samples, (0, 1, -1)]
+            rand_rows1 = torch.randperm(sample1.size(0))[:n_sub_samples]
             
             # Sample the same amount of ground truth data
             sample2 = torch.from_numpy(gts_data)
-            rand_rows2 = torch.randperm(sample2.size(0))[:n_samples]
+            rand_rows2 = torch.randperm(sample2.size(0))[:n_sub_samples]
             
             # exponential kernel parameters per factor
-            alpha_list = [10,10,10]
+            alpha_list = [10, 10, 10]
             
             # factor is either X, Y or theta
             for factor in range(sample1.size(-1)):
@@ -275,7 +283,7 @@ def compute_mmd_test(model_data, gts_data, n_samples=100, p_value=0.005):
                 mmd_perm_test = []
                 for j in range(100):
                     np.random.shuffle(s1s2)
-                    s1_sh, s2_sh = s1s2[:n_samples], s1s2[n_samples:]
+                    s1_sh, s2_sh = s1s2[:n_sub_samples], s1s2[n_sub_samples:]
                     mmd = compute_mmd(s1_sh, s2_sh, alpha_list[factor])
                     mmd_perm_test.append(mmd.item())
                 c_val = np.quantile(mmd_perm_test, 1 - p_value)
@@ -310,29 +318,55 @@ def compute_mmd_test(model_data, gts_data, n_samples=100, p_value=0.005):
             key_ks_max_factor = key_ks_max[1]
             key_score = 1.0
         else: 
-            res_agg_dict[key] = 'not significant'
+            # res_agg_dict[key] = 'not significant'
+            del res_agg_dict[key] 
             continue
 
-        res_agg_dict[key] = (key_ks_max_factor, round(key_ks_max[0], 2), key_score)       
+        res_agg_dict[key] = (key_ks_max_factor, round(key_ks_max[0], 5), key_score)       
+        
     return res_dict, res_agg_dict, res_agg2_dict
 
 
+def select_top3_factors(res_dict):
+    """
+    Selelcts three latent interventions with the highest hypothesis test 
+    score.
+    """
+    n_factors = 3
+    sig_res_dict = {k: v for k, v in res_dict.items() if type(v) != str}
+    score_list = [(key, res_dict[key][1]) for key in res_dict.keys()]
+    top3_keys = heapq.nlargest(3, score_list, key=lambda x: x[1])
+    dis_score = round(np.sum(list(map(lambda x: x[1], top3_keys))), 3)
+    cover_list = np.unique([res_dict[key][0] for key in map(lambda x: x[0], top3_keys)])
+    cover_score = round(len(cover_list) / n_factors, 3)
+    return dis_score, cover_score
+    
 
 if __name__ == '__main___':
-    model_names = ['gan2', 'gan3', 'vae5','vae8']
+    model_names = ['gan6'] #['gan6', 'vae6']
     
     gt_data = np.load('dataset/simulation_states/yumi_states.npy')
     gts_data = gt_data[:, (0, 1, -1)]
 
     for i in range(len(model_names)):
         print(model_names[i])
-        model_data = load_simulation_state_dict(model_names[i], plot=False)
-        d, d_temp, _ = compute_mmd_test(model_data, gts_data, n_samples=200, 
-                                        p_value=0.001)
+        model_data = load_simulation_state_dict(model_names[i], plot=True)
+        indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
+        n_inter = model_data['info'][indices[0]][1]
+        n_inter_samples = int(model_data['info'][indices[1]][1])
+        del model_data['info']
+        d, d_temp, d_temp1 = compute_mmd_test(model_data, gts_data, n_sub_samples=200, 
+                                        p_value=0.001, n_inter=n_inter,
+                                        n_inter_samples=n_inter_samples)
+        d_mmd, c_mmd = select_top3_factors(d_temp)
         print(' *- MMD', d_temp)
-        d, d_temp, _ = compute_ks_test(model_data, gts_data, n_samples=2000, 
-                                       p_value=0.001)
+        
+        d, d_temp, _ = compute_ks_test(model_data, gts_data, n_sub_samples=2000, 
+                                       p_value=0.001, n_inter=n_inter,
+                                        n_inter_samples=n_inter_samples)
+        d_ks, c_ks = select_top3_factors(d_temp)
         print(' *- KS', d_temp)
+        print(d_mmd, c_mmd, ' vs ', d_ks, c_ks)
         
     model_data = load_simulation_state_dict('vae8', plot=True)
     
