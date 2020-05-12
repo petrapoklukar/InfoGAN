@@ -15,6 +15,8 @@ sys.path.insert(0,'..')
 import pickle
 from scipy import stats
 import heapq
+import csv
+
 
 class FullyConnecteDecoder(nn.Module):
     def __init__(self, input_size, output_size):
@@ -168,7 +170,7 @@ def compute_mmd(sample1, sample2, alpha):
     
 
 def compute_ks_test(model_data, gts_data, n_sub_samples=2000, p_value=0.01,
-                    n_inter=4, n_inter_samples=2000):
+                    n_inter=4, n_inter_samples=2000, n_resampling=10):
     """
     Computes the Kolmogorov-Smirnov two sample test with a given pvalue.
     
@@ -192,23 +194,25 @@ def compute_ks_test(model_data, gts_data, n_sub_samples=2000, p_value=0.01,
         for key in [k for k in model_data.keys() if k !='info']:
             # Result factors corresponding to each intervention in the latent space
             sample1 = torch.from_numpy(model_data[key])[e*n_inter_samples:(e+1)*n_inter_samples, (0, 1, -1)]
-            rand_rows1 = torch.randperm(sample1.size(0))[:n_sub_samples]
             
             # Sample the same amount of ground truth data
             sample2 = torch.from_numpy(gts_data)
-            rand_rows2 = torch.randperm(sample2.size(0))[:n_sub_samples]
-            
-            # factor is either X, Y or theta
-            for factor in range(sample1.size(-1)):
-                assert(sample1[rand_rows1, factor].shape == sample2[rand_rows2, factor].shape )
+
+            for p in range(n_resampling):
+                rand_rows1 = torch.randperm(sample1.size(0))[:n_sub_samples]
+                rand_rows2 = torch.randperm(sample2.size(0))[:n_sub_samples]
                 
-                # KS test if the generated factor distribution is the same as gt one
-                ks = stats.ks_2samp(sample1[rand_rows1, factor], sample2[rand_rows2, factor])
-                
-                # If small enough p-value as well as big enough statistics, reject null hypothesis
-                if ks.pvalue < p_value and ks.statistic > c_val:
-                    # Distributions are different
-                    res_dict[key][factor].append(round(ks.statistic - c_val, 2))
+                # factor is either X, Y or theta
+                for factor in range(sample1.size(-1)):
+                    assert(sample1[rand_rows1, factor].shape == sample2[rand_rows2, factor].shape )
+                    
+                    # KS test if the generated factor distribution is the same as gt one
+                    ks = stats.ks_2samp(sample1[rand_rows1, factor], sample2[rand_rows2, factor])
+                    
+                    # If small enough p-value as well as big enough statistics, reject null hypothesis
+                    if ks.pvalue < p_value and ks.statistic > c_val:
+                        # Distributions are different
+                        res_dict[key][factor].append(round(ks.statistic - c_val, 2))
                     
     res_agg_dict = {}
     res_agg2_dict = {}
@@ -228,7 +232,7 @@ def compute_ks_test(model_data, gts_data, n_sub_samples=2000, p_value=0.01,
             key_ks_max = max(res_agg_dict[key], key=lambda x: x[0])
             key_ks_max_factor = key_ks_max[1]
             inter_ks_list = list(map(lambda x: (key_ks_max[0]-x[0])/key_ks_max[0], res_agg_dict[key]))
-            inter_ks_list.remove(0)
+            inter_ks_list.remove(0.0)
             key_score = round(np.mean(inter_ks_list), 2)
         elif len(res_agg_dict[key]) == 1:
             key_ks_max = res_agg_dict[key][0]
@@ -243,7 +247,7 @@ def compute_ks_test(model_data, gts_data, n_sub_samples=2000, p_value=0.01,
 
 
 def compute_mmd_test(model_data, gts_data, n_sub_samples=100, p_value=0.005, 
-                     n_inter=4, n_inter_samples=2000):
+                     n_inter=4, n_inter_samples=2000, n_resampling=10):
     """
     Computes the Maximum Mean Discrepancy using exponential kernel with 
     hyperparameter alpha. 
@@ -263,35 +267,37 @@ def compute_mmd_test(model_data, gts_data, n_sub_samples=100, p_value=0.005,
             
             # Result factors corresponding to each intervention in the latent space
             sample1 = torch.from_numpy(model_data[key])[e*n_inter_samples:(e+1)*n_inter_samples, (0, 1, -1)]
-            rand_rows1 = torch.randperm(sample1.size(0))[:n_sub_samples]
             
             # Sample the same amount of ground truth data
             sample2 = torch.from_numpy(gts_data)
-            rand_rows2 = torch.randperm(sample2.size(0))[:n_sub_samples]
             
             # exponential kernel parameters per factor
             alpha_list = [10, 10, 10]
             
-            # factor is either X, Y or theta
-            for factor in range(sample1.size(-1)):
-                s1 = sample1[rand_rows1, factor].reshape(-1, 1)
-                s2 = sample2[rand_rows2, factor].reshape(-1, 1)
+            for p in range(n_resampling):
+                rand_rows1 = torch.randperm(sample1.size(0))[:n_sub_samples]
+                rand_rows2 = torch.randperm(sample2.size(0))[:n_sub_samples]
                 
-                # Get the critical value from the permutation test by choosing
-                # the 1 - pvalue quantile of the distribution of MMD estimators
-                s1s2 = torch.cat([s1, s2])
-                mmd_perm_test = []
-                for j in range(100):
-                    np.random.shuffle(s1s2)
-                    s1_sh, s2_sh = s1s2[:n_sub_samples], s1s2[n_sub_samples:]
-                    mmd = compute_mmd(s1_sh, s2_sh, alpha_list[factor])
-                    mmd_perm_test.append(mmd.item())
-                c_val = np.quantile(mmd_perm_test, 1 - p_value)
+                # factor is either X, Y or theta
+                for factor in range(sample1.size(-1)):
+                    s1 = sample1[rand_rows1, factor].reshape(-1, 1)
+                    s2 = sample2[rand_rows2, factor].reshape(-1, 1)
+                    
+                    # Get the critical value from the permutation test by choosing
+                    # the 1 - pvalue quantile of the distribution of MMD estimators
+                    s1s2 = torch.cat([s1, s2])
+                    mmd_perm_test = []
+                    for j in range(100):
+                        np.random.shuffle(s1s2)
+                        s1_sh, s2_sh = s1s2[:n_sub_samples], s1s2[n_sub_samples:]
+                        mmd = compute_mmd(s1_sh, s2_sh, alpha_list[factor])
+                        mmd_perm_test.append(mmd.item())
+                    c_val = np.quantile(mmd_perm_test, 1 - p_value)
+                    
                 
-            
-                mmd = compute_mmd(s1, s2, alpha=alpha_list[factor]).item()
-                if mmd > c_val:
-                    res_dict[key][factor].append(round(mmd - c_val, 2))
+                    mmd = compute_mmd(s1, s2, alpha=alpha_list[factor]).item()
+                    if mmd > c_val:
+                        res_dict[key][factor].append(round(mmd - c_val, 2))
     
     res_agg_dict = {}
     res_agg2_dict = {}
@@ -308,21 +314,21 @@ def compute_mmd_test(model_data, gts_data, n_sub_samples=100, p_value=0.005,
         # Select the factor where ks was the highest and compare it with the rest to get
         # the confidence level
         if len(res_agg_dict[key]) > 1:
-            key_ks_max = max(res_agg_dict[key], key=lambda x: x[0])
-            key_ks_max_factor = key_ks_max[1]
-            inter_ks_list = list(map(lambda x: (key_ks_max[0]-x[0])/key_ks_max[0], res_agg_dict[key]))
-            inter_ks_list.remove(0)
-            key_score = round(np.mean(inter_ks_list), 2)
+            key_mmd_max = max(res_agg_dict[key], key=lambda x: x[0])
+            key_mmd_max_factor = key_mmd_max[1]
+            inter_mmd_list = list(map(lambda x: (key_mmd_max[0]-x[0])/key_mmd_max[0], res_agg_dict[key]))
+            inter_mmd_list.remove(0.0)
+            key_score = round(np.mean(inter_mmd_list), 2)
         elif len(res_agg_dict[key]) == 1:
-            key_ks_max = res_agg_dict[key][0]
-            key_ks_max_factor = key_ks_max[1]
+            key_mmd_max = res_agg_dict[key][0]
+            key_mmd_max_factor = key_mmd_max[1]
             key_score = 1.0
         else: 
             # res_agg_dict[key] = 'not significant'
             del res_agg_dict[key] 
             continue
 
-        res_agg_dict[key] = (key_ks_max_factor, round(key_ks_max[0], 5), key_score)       
+        res_agg_dict[key] = (key_mmd_max_factor, round(key_mmd_max[0], 5), key_score)       
         
     return res_dict, res_agg_dict, res_agg2_dict
 
@@ -333,245 +339,102 @@ def select_top3_factors(res_dict):
     score.
     """
     n_factors = 3
-    sig_res_dict = {k: v for k, v in res_dict.items() if type(v) != str}
-    score_list = [(key, res_dict[key][1]) for key in res_dict.keys()]
+    score_list = [[key, res_dict[key][1]] for key in res_dict.keys()]
     top3_keys = heapq.nlargest(3, score_list, key=lambda x: x[1])
-    dis_score = round(np.sum(list(map(lambda x: x[1], top3_keys))), 3)
-    cover_list = np.unique([res_dict[key][0] for key in map(lambda x: x[0], top3_keys)])
-    cover_score = round(len(cover_list) / n_factors, 3)
-    return dis_score, cover_score
+    dis_precision = round(np.sum(list(map(lambda x: x[1], top3_keys))), 3)
+    cover_list = [res_dict[key][0] for key in map(lambda x: x[0], top3_keys)]
+    unique_cover_list = np.unique(cover_list)
+    dis_recall = round(len(unique_cover_list) / n_factors, 3)
+    top3_results = [i + [res_dict[i[0]][0]] for i in top3_keys]
+    return dis_precision, dis_recall, top3_results
     
 
-if __name__ == '__main___':
-    model_names = ['gan6'] #['gan6', 'vae6']
+if __name__ == '__main__':
+    model_names = [
+        'data/ppo_gan1_t1.pkl', 
+        'data/ppo_gan2_t1.pkl', 
+        'data/ppo_gan3_t1.pkl', 
+        'data/ppo_vae1_t1.pkl', 
+        'data/ppo_vae2_t1.pkl', 
+        'data/ppo_vae3_t1.pkl', 
+        'data/ppo_vae4_t1.pkl', 
+        'data/ppo_vae5_t1.pkl', 
+        'data/ppo_vae6_t1.pkl', 
+        'data/ppo_vae7_t1.pkl', 
+        'data/ppo_vae8_t1.pkl', 
+        'data/ppo_vae9_t1.pkl'
+        ] 
     
     gt_data = np.load('dataset/simulation_states/yumi_states.npy')
     gts_data = gt_data[:, (0, 1, -1)]
 
-    for i in range(len(model_names)):
-        print(model_names[i])
-        model_data = load_simulation_state_dict(model_names[i], plot=True)
-        indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
-        n_inter = model_data['info'][indices[0]][1]
-        n_inter_samples = int(model_data['info'][indices[1]][1])
-        del model_data['info']
-        d, d_temp, d_temp1 = compute_mmd_test(model_data, gts_data, n_sub_samples=200, 
-                                        p_value=0.001, n_inter=n_inter,
-                                        n_inter_samples=n_inter_samples)
-        d_mmd, c_mmd = select_top3_factors(d_temp)
-        print(' *- MMD', d_temp)
+    end_results = {}
+    results_filename = 'results/disentanglement_scores.csv'
+    with open(results_filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',')
+         
+        for i in range(len(model_names)-6):
+            model_name = model_names[i].split('.')[0].split('/')[-1]
+            print(model_name)
+            
+            end_results[model_name] = {}
+            
+            
+            model_data = load_simulation_state_dict(model_names[i], plot=False)
+            indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
+            n_inter = model_data['info'][indices[0]][1]
+            n_inter_samples = int(model_data['info'][indices[1]][1])
+            del model_data['info']
+            mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(model_data, gts_data, n_sub_samples=20, 
+                                            p_value=0.001, n_inter=n_inter,
+                                            n_inter_samples=n_inter_samples)
+            dp_mmd, dr_mmd, t3_mmd = select_top3_factors(mmdd_temp)
+            end_results[model_name]['mmd'] = (dp_mmd, dr_mmd)
+            t3_mmd = sorted(t3_mmd, key=lambda x: x[0])
+            print(' *- MMD', t3_mmd)
+            
+            d, d_temp, _ = compute_ks_test(model_data, gts_data, n_sub_samples=2000, 
+                                           p_value=0.001, n_inter=n_inter,
+                                            n_inter_samples=n_inter_samples)
+            dp_ks, dr_ks, t3_ks = select_top3_factors(d_temp)
+            end_results[model_name]['ks'] = (dp_ks, dr_ks)
+            t3_ks = sorted(t3_ks, key=lambda x: x[0])
+            print(' *- KS', t3_ks)
+            
+            writer.writerow([model_name, 'MMD', dp_mmd, dr_mmd, t3_mmd, 'KS', dp_mmd, dr_mmd, t3_mmd])
         
-        d, d_temp, _ = compute_ks_test(model_data, gts_data, n_sub_samples=2000, 
-                                       p_value=0.001, n_inter=n_inter,
-                                        n_inter_samples=n_inter_samples)
-        d_ks, c_ks = select_top3_factors(d_temp)
-        print(' *- KS', d_temp)
-        print(d_mmd, c_mmd, ' vs ', d_ks, c_ks)
-        
-    model_data = load_simulation_state_dict('vae8', plot=True)
     
-    # Plot GT data    
-    plt.figure(50)
-    # plt.clf()
-    # for i in range(6):
-    #     plt.subplot(6, 1, i+1)
-    #     plt.hist(gt_data[:, i], bins=100)
-    # plt.subplots_adjust(hspace=0.5)
-    # plt.show()
-    
+    with open('results/disentanglement_scores_dict.pkl', 'wb') as f:
+        pickle.dump(end_results, f)
+ 
+    # plot the results
+    plt.figure(10)
     plt.clf()
-    plt.subplot(3, 1, 1)
-    plt.hist(gt_data[:, 0])#, bins=50)
-    plt.title('X')
-    
-    plt.subplot(3, 1, 2)
-    plt.hist(gt_data[:, 1])#, bins=50)
-    plt.title('Y')
-    
-    plt.subplot(3, 1, 3)
-    plt.hist(gt_data[:, -1])#, bins=50)
-    plt.title('Theta')
-    
+    plt.subplot(1, 2, 1)
+    for model in end_results.keys():
+        model_name = model.split('_')[1]
+        x, y = end_results[model]['mmd']
+        plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+    plt.legend()
+    plt.title('Disentanglement using MMD')
+    plt.xlabel('disentangling precision')
+    plt.ylabel('disentangling recall')
+    plt.ylim((0.28, 1.02))
+    plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
+    # plt.show()
+
+    # plt.figure(11)
+    # plt.clf()
+    plt.subplot(1, 2, 2)
+    for model in end_results.keys():
+        model_name = model.split('_')[1]
+        x, y = end_results[model]['ks']
+        plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+    plt.legend()
+    plt.title('Disentanglement using KS')  
+    plt.xlabel('disentangling precision')
+    # plt.ylabel('disentangling recall')
+    plt.ylim((0.28, 1.02))
+    plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
     plt.show()
     
-    
-    # # Manual correction
-    # model_data_corr = model_data.copy()
-    # pairs = [('2', 1), ('0', 2), ('1', 0)]
-    # for p in pairs:
-    #     temp3 = model_data[p[0]][:5000, p[1]]
-    #     temp1 = model_data[p[0]][torch.randperm(10000)[:5000], :]
-    #     temp1[:, p[1]] = temp3
-    #     model_data_corr[p[0]] = temp1
-
-    # ld = 3
-    # for fixed_fac in list(model_data_corr.keys()):
-    #     plt.figure(fixed_fac, figsize=(10, 10))
-    #     plt.clf()
-    #     for i in range(ld):
-    #         plt.subplot(ld, 1, i + 1)
-    #         plt.hist(model_data_corr[fixed_fac][:, i], bins=50)
-    #         plt.legend()
-            
-    #     plt.subplots_adjust(hspace=0.5)
-    #     plt.show()
-    from scipy.stats import wasserstein_distance
-    from scipy import stats
-    for key in model_data.keys():
-        print('Fixed latent dim ', key)
-        sample1 = torch.from_numpy(model_data[key])[:, (0, 1, -1)]
-        sample2 = torch.from_numpy(gts_data)#.reshape(-1, 1))
-        rand_rows1 = torch.randperm(sample1.size(0))[:10000]
-        rand_rows2 = torch.randperm(sample2.size(0))[:10000]
-        
-        inter_mmd_list = []
-        for i in range(sample1.size(-1)):
-            # mmd = compute_mmd(sample1[:, i].reshape(-1, 1), 
-            #                   sample2[rand_rows2, i].reshape(-1, 1), alpha=2)
-            mmd = stats.ks_2samp(sample1[rand_rows1, i], 
-                              sample2[rand_rows2, i])#, equal_var=False)
-            if mmd.pvalue < 0.05:
-                inter_mmd_list.append((round(mmd.statistic, 2), i))
-                print(key, i, round(mmd.statistic, 2))
-        
-        if inter_mmd_list:
-            key_max_mmd = max(inter_mmd_list, key=lambda x: x[0])
-            # np.max((inter_mmd_list - key_max_mmd)/key_max_mmd)
-            print((key, key_max_mmd), '\n', )
-        
-        
-    stat_alpha = 0.05
-    n_samples = 500
-    for key in model_data.keys():
-        print('Fixed latent dim ', key)
-        sample1 = torch.from_numpy(model_data[key])[:, (0, 1, -1)]
-        sample2 = torch.from_numpy(gts_data)#.reshape(-1, 1))
-        
-
-        rand_rows1 = torch.randperm(sample1.size(0))[:n_samples]
-        rand_rows2 = torch.randperm(sample2.size(0))[:n_samples]
-        
-        alpha_list = [10,10,10]
-        inter_mmd_list = []
-        for i in range(sample1.size(-1)):
-            s1 = sample1[rand_rows1, i].reshape(-1, 1)
-            s2 = sample2[rand_rows2, i].reshape(-1, 1)
-            
-            s1s2 = torch.cat([s1, s2])
-            # Get the 1 - alpha quantile of MMD estimators
-            mmd_perm_test = []
-            for j in range(100):
-                rand_rows1 = torch.randperm(sample1.size(0))[:n_samples]
-                rand_rows2 = torch.randperm(sample2.size(0))[:n_samples]
-                s1 = sample1[rand_rows1, i].reshape(-1, 1)
-                s2 = sample2[rand_rows2, i].reshape(-1, 1)
-                
-                s1s2 = torch.cat([s1, s2])
-                np.random.shuffle(s1s2)
-                s1_sh, s2_sh = s1s2[:n_samples], s1s2[n_samples:]
-                mmd = compute_mmd(s1_sh, s2_sh, alpha_list[i])
-                mmd_perm_test.append(mmd.item())
-            rej_threshold = np.quantile(mmd_perm_test, 1 - stat_alpha)
-            
-            # mmd = compute_mmd(sample1[:, i].reshape(-1, 1), 
-            #                   sample2[rand_rows2, i].reshape(-1, 1), alpha=2)
-            mmd = compute_mmd(s1, s2, alpha=alpha_list[i]).item()
-            if mmd > rej_threshold:
-                print('   {0} and {1} not same: {2}'.format(key, str(i), str(mmd)))
-            else:
-                print('   {0} and {1}: {2}'.format(key, str(i), mmd))
-            inter_mmd_list.append((mmd, mmd > rej_threshold))
-        
-        key_max_mmd = max(inter_mmd_list, key=lambda x: x[0])
-        key_max_mmd_dim = inter_mmd_list.index(key_max_mmd)
-        inter_mmd_list = list(map(lambda x: (key_max_mmd[0]-x[0])/key_max_mmd[0], inter_mmd_list))
-        inter_mmd_list.remove(0)
-        key_score = np.mean(inter_mmd_list)
-        # np.max((inter_mmd_list - key_max_mmd)/key_max_mmd)
-        print((key, key_score, key_max_mmd_dim, key_max_mmd[1]), '\n', )
- 
-    
-    
-    
-    stat_alpha = 0.05
-    n_samples = 500
-    for key in model_data.keys():
-        print('Fixed latent dim ', key)
-        sample1 = torch.from_numpy(model_data[key])[:, (0, 1, -1)]
-        sample2 = torch.from_numpy(gts_data)#.reshape(-1, 1))
-        for k in range(3):
-            print(' k = ', str(k))
-            rand_rows1 = torch.randperm(sample1.size(0))[:n_samples]
-            rand_rows2 = torch.randperm(sample2.size(0))[:n_samples]
-            
-            alpha_list = [10,10,10]
-            inter_mmd_list = []
-            for i in range(sample1.size(-1)):
-                s1 = sample1[rand_rows1, i].reshape(-1, 1)
-                s2 = sample2[rand_rows2, i].reshape(-1, 1)
-                
-                s1s2 = torch.cat([s1, s2])
-                # Get the 1 - alpha quantile of MMD estimators
-                mmd_perm_test = []
-                for j in range(100):
-                    np.random.shuffle(s1s2)
-                    s1_sh, s2_sh = s1s2[:n_samples], s1s2[n_samples:]
-                    mmd = compute_mmd(s1_sh, s2_sh, alpha_list[i])
-                    mmd_perm_test.append(mmd.item())
-                rej_threshold = np.quantile(mmd_perm_test, 1 - stat_alpha)
-                
-                # mmd = compute_mmd(sample1[:, i].reshape(-1, 1), 
-                #                   sample2[rand_rows2, i].reshape(-1, 1), alpha=2)
-                mmd = compute_mmd(s1, s2, alpha=alpha_list[i]).item()
-                if mmd > rej_threshold:
-                    print('   {0} and {1} not same: {2}'.format(key, str(i), str(mmd)))
-                else:
-                    print('   {0} and {1}: {2}'.format(key, str(i), mmd))
-                inter_mmd_list.append((mmd, mmd > rej_threshold))
-        
-        key_max_mmd = max(inter_mmd_list, key=lambda x: x[0])
-        key_max_mmd_dim = inter_mmd_list.index(key_max_mmd)
-        inter_mmd_list = list(map(lambda x: (key_max_mmd[0]-x[0])/key_max_mmd[0], inter_mmd_list))
-        inter_mmd_list.remove(0)
-        key_score = np.mean(inter_mmd_list)
-        # np.max((inter_mmd_list - key_max_mmd)/key_max_mmd)
-        print((key, key_score, key_max_mmd_dim, key_max_mmd[1]), '\n', )
-
-
-    for key in model_data.keys():
-        print('Fixed latent dim ', key)
-        sample1 = torch.from_numpy(model_data[key])[:, (0, 1, -1)]
-        sample2 = torch.from_numpy(gts_data)#.reshape(-1, 1))
-        rand_rows1 = torch.randperm(sample1.size(0))[:5000]
-        rand_rows2 = torch.randperm(sample2.size(0))[:5000]
-        
-        alpha_list = [10,10,10]
-        inter_mmd_list = []
-        for i in range(sample1.size(-1)):
-            s1 = sample1[rand_rows1, i].reshape(-1, 1)
-            s2 = sample2[rand_rows2, i].reshape(-1, 1)
-            
-            s1s2 = torch.cat([s1, s2])
-            # Get the 1 - alpha quantile of MMD estimators
-            mmd_perm_test = []
-            for j in range(100):
-                np.random.shuffle(s1s2)
-                s1_sh, s2_sh = s1s2[:5000], s1s2[5000:]
-                mmd = compute_mmd(s1_sh, s2_sh, alpha_list[i])
-                mmd_perm_test.append(mmd)
-            
-            # mmd = compute_mmd(sample1[:, i].reshape(-1, 1), 
-            #                   sample2[rand_rows2, i].reshape(-1, 1), alpha=2)
-            mmd = compute_mmd(sample1[rand_rows1, i].reshape(-1, 1), 
-                              sample2[rand_rows2, i].reshape(-1, 1), alpha=alpha_list[i])
-            inter_mmd_list.append(mmd.numpy())
-            print(mmd)
-        
-        key_max_mmd = max(inter_mmd_list)
-        key_max_mmd_dim = inter_mmd_list.index(key_max_mmd)
-        inter_mmd_list = list(map(lambda x: (key_max_mmd-x)/key_max_mmd, inter_mmd_list))
-        inter_mmd_list.remove(0)
-        key_score = np.mean(inter_mmd_list)
-        # np.max((inter_mmd_list - key_max_mmd)/key_max_mmd)
-        print((key, key_score, key_max_mmd_dim), '\n', )
-            
