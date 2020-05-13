@@ -16,7 +16,7 @@ import pickle
 from scipy import stats
 import heapq
 import csv
-
+from datetime import datetime
 
 class FullyConnecteDecoder(nn.Module):
     def __init__(self, input_size, output_size):
@@ -223,7 +223,7 @@ def compute_ks_test(model_data, gts_data, n_sub_samples=2000, p_value=0.01,
             # Mean value of succesfull KS tests per pair (latent_intervention, factor)
             # The higher the better!
             avg_mmd_score = np.mean(res_dict[key][f])
-            if not np.isnan(avg_mmd_score):
+            if not np.isnan(avg_mmd_score) and avg_mmd_score > 0:
                 res_agg_dict[key].append((avg_mmd_score, f))
                 res_agg2_dict[key].append((avg_mmd_score, f))
         # Select the factor where ks was the highest and compare it with the rest to get
@@ -240,6 +240,7 @@ def compute_ks_test(model_data, gts_data, n_sub_samples=2000, p_value=0.01,
             key_score = 1.0
         else: 
             # res_agg_dict[key] = 'not significant'
+            del res_agg_dict[key] 
             continue
         res_agg_dict[key] = (key_ks_max_factor, round(key_ks_max[0], 5), key_score)
         
@@ -247,7 +248,8 @@ def compute_ks_test(model_data, gts_data, n_sub_samples=2000, p_value=0.01,
 
 
 def compute_mmd_test(model_data, gts_data, n_sub_samples=100, p_value=0.005, 
-                     n_inter=4, n_inter_samples=2000, n_resampling=10):
+                     n_inter=4, n_inter_samples=2000, n_resampling=10, 
+                     alpha_list=[10, 10, 10]):
     """
     Computes the Maximum Mean Discrepancy using exponential kernel with 
     hyperparameter alpha. 
@@ -270,9 +272,6 @@ def compute_mmd_test(model_data, gts_data, n_sub_samples=100, p_value=0.005,
             
             # Sample the same amount of ground truth data
             sample2 = torch.from_numpy(gts_data)
-            
-            # exponential kernel parameters per factor
-            alpha_list = [10, 10, 10]
             
             for p in range(n_resampling):
                 rand_rows1 = torch.randperm(sample1.size(0))[:n_sub_samples]
@@ -308,7 +307,7 @@ def compute_mmd_test(model_data, gts_data, n_sub_samples=100, p_value=0.005,
             # Mean value of succesfull KS tests per pair (latent_intervention, factor)
             # The higher the better!
             avg_mmd_score = np.mean(res_dict[key][f])
-            if not np.isnan(avg_mmd_score):
+            if not np.isnan(avg_mmd_score) and avg_mmd_score > 0:
                 res_agg_dict[key].append((avg_mmd_score, f))
                 res_agg2_dict[key].append((avg_mmd_score, f))
         # Select the factor where ks was the highest and compare it with the rest to get
@@ -367,74 +366,260 @@ if __name__ == '__main__':
     
     gt_data = np.load('dataset/simulation_states/yumi_states.npy')
     gts_data = gt_data[:, (0, 1, -1)]
-
-    end_results = {}
-    results_filename = 'results/disentanglement_scores.csv'
-    with open(results_filename, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile, delimiter=',')
+    
+    if False:
+        end_results2 = {}        
+        now = str(datetime.timestamp(datetime.now()))
+        results_filename = 'results/MMDalpha5_disentanglement_scores_{0}.csv'.format(now)
+        with open(results_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',')
+            for i in range(len(model_names)):
+                model_name = model_names[i].split('.')[0].split('/')[-1]
+                print(model_name)
+                
+                end_results2[model_name] = {}
+                
+                model_data = load_simulation_state_dict(model_names[i], plot=False)
+                indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
+                n_inter = model_data['info'][indices[0]][1]
+                n_inter_samples = int(model_data['info'][indices[1]][1])
+                del model_data['info']
+                mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(model_data, gts_data, n_sub_samples=200, 
+                                                p_value=0.001, n_inter=n_inter,
+                                                n_inter_samples=n_inter_samples, 
+                                                alpha_list = [1, 1, 1])
+                dp_mmd, dr_mmd, t3_mmd = select_top3_factors(mmdd_temp)
+                end_results2[model_name]['mmd'] = (dp_mmd, dr_mmd)
+                t3_mmd = sorted(t3_mmd, key=lambda x: x[0])
+                print(' *- MMD', t3_mmd)
          
-        for i in range(len(model_names)-6):
-            model_name = model_names[i].split('.')[0].split('/')[-1]
-            print(model_name)
+        with open('results/MMDalpha5_disentanglement_scores_{0}.pkl'.format(now), 'wb') as f:
+            pickle.dump(end_results2, f)      
+
             
-            end_results[model_name] = {}
+        # writer.writerow([model_name, 'MMD', dp_mmd, dr_mmd, t3_mmd, 'KS', dp_mmd, dr_mmd, t3_mmd])
+        model_group1 = ['vae' + str(i) for i in range(1, 7)]
+        model_group2 = ['vae' + str(i) for i in range(7, 10)] + ['gan' + str(i) for i in range(1, 4)]
+        plt.figure(12)
+        plt.clf()
+        plt.subplot(1, 2, 1)
+        for model in end_results2.keys():
+            model_name = model.split('_')[1]
+            if model_name in model_group1:
+                x, y = end_results2[model]['mmd']
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.title('Disentanglement using MMD')
+        plt.xlabel('disentangling precision')
+        plt.ylabel('disentangling recall')
+        plt.ylim((0.28, 1.02))
+        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
+        
+        plt.subplot(1, 2, 2)
+        for model in end_results2.keys():
+            model_name = model.split('_')[1]
+            if model_name in model_group2:
+                x, y = end_results2[model]['mmd']
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.title('Disentanglement using MMD')
+        plt.xlabel('disentangling precision')
+        plt.ylabel('disentangling recall')
+        plt.ylim((0.28, 1.02))
+        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
+        plt.show()
+        
+        end_results3 = {key: np.sum(end_results2[key]['ks']) for key in end_results2.keys()}
+        plt.figure(13)
+        plt.clf()
+        plt.subplot(1, 2, 1)
+        for model in end_results3.keys():
+            model_name = model.split('_')[1]
+            if model_name in model_group1:
+                y = end_results3[model]
+                plt.scatter(1, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.title('Disentanglement using MMD')
+        plt.xlabel('disentangling precision')
+        plt.ylabel('disentangling recall')
+        
+        
+        plt.subplot(1, 2, 2)
+        for model in end_results3.keys():
+            model_name = model.split('_')[1]
+            if model_name in model_group2:
+                y = end_results3[model]
+                plt.scatter(1, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.title('Disentanglement using MMD')
+        plt.xlabel('disentangling precision')
+        plt.ylabel('disentangling recall')
+        
+        plt.show()
+    
             
+        
+                
+    if False:
+        end_results = {}        
+        now = str(datetime.timestamp(datetime.now()))
+        results_filename = 'results/disentanglement_scores_{0}.csv'.format(now)
+        with open(results_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',')
+            for i in range(len(model_names)):
+                model_name = model_names[i].split('.')[0].split('/')[-1]
+                print(model_name)
+                
+                end_results[model_name] = {}
+                
+                model_data = load_simulation_state_dict(model_names[i], plot=False)
+                indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
+                n_inter = model_data['info'][indices[0]][1]
+                n_inter_samples = int(model_data['info'][indices[1]][1])
+                del model_data['info']
+                mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(model_data, gts_data, n_sub_samples=200, 
+                                                p_value=0.001, n_inter=n_inter,
+                                                n_inter_samples=n_inter_samples)
+                dp_mmd, dr_mmd, t3_mmd = select_top3_factors(mmdd_temp)
+                end_results[model_name]['mmd'] = (dp_mmd, dr_mmd)
+                t3_mmd = sorted(t3_mmd, key=lambda x: x[0])
+                print(' *- MMD', t3_mmd)
+                
+                d, d_temp, _ = compute_ks_test(model_data, gts_data, n_sub_samples=500, 
+                                               p_value=0.001, n_inter=n_inter,
+                                                n_inter_samples=n_inter_samples, n_resampling=4)
+                dp_ks, dr_ks, t3_ks = select_top3_factors(d_temp)
+                end_results[model_name]['ks'] = (dp_ks, dr_ks)
+                t3_ks = sorted(t3_ks, key=lambda x: x[0])
+                print(' *- KS', t3_ks)
+                
+                writer.writerow([model_name, 'MMD', dp_mmd, dr_mmd, t3_mmd, 'KS', dp_mmd, dr_mmd, t3_mmd])
             
-            model_data = load_simulation_state_dict(model_names[i], plot=False)
-            indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
-            n_inter = model_data['info'][indices[0]][1]
-            n_inter_samples = int(model_data['info'][indices[1]][1])
-            del model_data['info']
-            mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(model_data, gts_data, n_sub_samples=20, 
-                                            p_value=0.001, n_inter=n_inter,
-                                            n_inter_samples=n_inter_samples)
-            dp_mmd, dr_mmd, t3_mmd = select_top3_factors(mmdd_temp)
-            end_results[model_name]['mmd'] = (dp_mmd, dr_mmd)
-            t3_mmd = sorted(t3_mmd, key=lambda x: x[0])
-            print(' *- MMD', t3_mmd)
+        
+        with open('results/disentanglement_scores_dict.pkl', 'wb') as f:
+            pickle.dump(end_results, f)
+     
+        # plot the results
+        model_group1 = ['vae' + str(i) for i in range(1, 7)]
+        model_group2 = ['vae' + str(i) for i in range(7, 10)] + ['gan' + str(i) for i in range(1, 4)]
+        
+        plt.figure(11)
+        plt.clf()
+
+        plt.subplot(2, 2, 1)
+        for model in end_results.keys():
+            model_name = model.split('_')[1]
+            if model_name in model_group1:
+                x, y = end_results[model]['mmd']
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.title('MMD Disentanglement scores')
+        plt.xlabel('disentangling precision')
+        plt.ylabel('disentangling recall')
+        plt.ylim((0.28, 1.02))
+        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
+        
+        plt.subplot(2, 2, 2)
+        for model in end_results.keys():
+            model_name = model.split('_')[1]
+            if model_name in model_group1:
+                x, y = 1, np.sum(end_results[model]['mmd'])
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.title('MMD Aggregated disentanglement scores')  
+        plt.xlim((1-0.005, 1.005))
+        plt.xticks(ticks=[1.0], labels=[''])
+        plt.ylim((1.1, 1.8))
+        plt.legend()
+        
+        plt.subplot(2, 2, 3)
+        for model in end_results.keys():
+            model_name = model.split('_')[1]
+            if model_name in model_group2:
+                x, y = end_results[model]['mmd']
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        
+        plt.xlabel('disentangling precision')
+        plt.ylabel('disentangling recall')
+        plt.ylim((0.28, 1.02))
+        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
+        
+        plt.subplot(2, 2, 4)
+        for model in end_results.keys():
+            model_name = model.split('_')[1]
+            if model_name in model_group2:
+                x, y = 1, np.sum(end_results[model]['mmd'])
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.xlim((1-0.005, 1.005))
+        plt.xticks(ticks=[1.0], labels=[''])
+        plt.ylim((1.1, 1.8))
+        plt.subplots_adjust(hspace=0.5)
+        plt.show()
+        
+        
+        
+        
+        fig3 = plt.figure(constrained_layout=True, figsize=(5,5))
+        gs = fig3.add_gridspec(2, 3)
+        
+        f3_ax1 = fig3.add_subplot(gs[0, 0])
+        f3_ax1.set_xlim((1-0.005, 1.005))
+        f3_ax1.set_xticks([1.0-0.002])
+        f3_ax1.set_xticklabels([])
+        f3_ax1.tick_params(axis='x', length=0)
+        f3_ax1.set_ylim((1.1, 1.8))
+        f3_ax1.set_title('MMD Aggregated\ndisentanglement scores')
+        
+        f3_ax2 = fig3.add_subplot(gs[0, 1:])
+        f3_ax2.set_ylim((0.28, 1.02))
+        f3_ax2.set_yticks([0.333, 0.666, 1.0])
+        f3_ax2.set_yticklabels(['1/3', '2/3', '3/3'])
+        f3_ax2.set_ylabel('disentangling recall')
+        f3_ax2.set_xlim((0.45, 0.9))
+        f3_ax2.set_title('MMD disentanglement scores')
+        
+        f3_ax3 = fig3.add_subplot(gs[1, 0])
+        f3_ax3.set_xlim((1-0.005, 1.005))
+        f3_ax3.set_xticks([1.0-0.002])
+        f3_ax3.set_xticklabels([])
+        f3_ax3.tick_params(axis='x', length=0)
+        f3_ax3.set_ylim((1.1, 1.8))
+        
+        f3_ax4 = fig3.add_subplot(gs[1, 1:])
+        f3_ax4.set_ylim((0.28, 1.02))
+        f3_ax4.set_yticks([0.333, 0.666, 1.0])
+        f3_ax4.set_yticklabels(['1/3', '2/3', '3/3'])
+        f3_ax4.set_ylabel('disentangling recall')
+        f3_ax4.set_xlim((0.45, 0.9))
+        f3_ax4.set_xlabel('disentangling precision')
+        plt.subplots_adjust(hspace=0.2, wspace=0.5)
+        
+        for model in end_results.keys():
+            model_name = model.split('_')[1]
+            x, y = end_results[model]['mmd']
+            if model_name in model_group1:
+                f3_ax1.scatter(1.0-0.002, x+y, alpha=0.7, label=model_name, marker='D')
+                f3_ax1.legend()
+                f3_ax2.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+            else:
+                f3_ax3.scatter(1.0-0.002, x+y, alpha=0.7, label=model_name, marker='D')
+                f3_ax3.legend()
+                f3_ax4.scatter(x, y, alpha=0.7, label=model_name, marker='D')
             
-            d, d_temp, _ = compute_ks_test(model_data, gts_data, n_sub_samples=2000, 
-                                           p_value=0.001, n_inter=n_inter,
-                                            n_inter_samples=n_inter_samples)
-            dp_ks, dr_ks, t3_ks = select_top3_factors(d_temp)
-            end_results[model_name]['ks'] = (dp_ks, dr_ks)
-            t3_ks = sorted(t3_ks, key=lambda x: x[0])
-            print(' *- KS', t3_ks)
-            
-            writer.writerow([model_name, 'MMD', dp_mmd, dr_mmd, t3_mmd, 'KS', dp_mmd, dr_mmd, t3_mmd])
+        ax1_handles, ax1_labels = f3_ax1.get_legend_handles_labels()
+        ax1_labels, ax1_handles = zip(*sorted(zip(ax1_labels, ax1_handles), key=lambda t: t[0]))
+        f3_ax1.legend(ax1_handles, ax1_labels)
+
+        ax3_handles, ax3_labels = f3_ax3.get_legend_handles_labels()
+        ax3_labels, ax3_handles = zip(*sorted(zip(ax3_labels, ax3_handles), key=lambda t: t[0]))
+        ax3_labels_new = ax3_labels[3:] + ax3_labels[:3]
+        ax3_handles_new = ax3_handles[3:] + ax3_handles[:3]
+        f3_ax3.legend(ax3_handles_new, ax3_labels_new)
+        
         
     
-    with open('results/disentanglement_scores_dict.pkl', 'wb') as f:
-        pickle.dump(end_results, f)
- 
-    # plot the results
-    plt.figure(10)
-    plt.clf()
-    plt.subplot(1, 2, 1)
-    for model in end_results.keys():
-        model_name = model.split('_')[1]
-        x, y = end_results[model]['mmd']
-        plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-    plt.legend()
-    plt.title('Disentanglement using MMD')
-    plt.xlabel('disentangling precision')
-    plt.ylabel('disentangling recall')
-    plt.ylim((0.28, 1.02))
-    plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
-    # plt.show()
-
-    # plt.figure(11)
-    # plt.clf()
-    plt.subplot(1, 2, 2)
-    for model in end_results.keys():
-        model_name = model.split('_')[1]
-        x, y = end_results[model]['ks']
-        plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-    plt.legend()
-    plt.title('Disentanglement using KS')  
-    plt.xlabel('disentangling precision')
-    # plt.ylabel('disentangling recall')
-    plt.ylim((0.28, 1.02))
-    plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
-    plt.show()
     
+            
+            
+            
