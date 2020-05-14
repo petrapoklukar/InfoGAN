@@ -387,76 +387,187 @@ if __name__ == '__main__':
                 mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(model_data, gts_data, n_sub_samples=200, 
                                                 p_value=0.001, n_inter=n_inter,
                                                 n_inter_samples=n_inter_samples, 
-                                                alpha_list = [1, 1, 1])
+                                                alpha_list = [5, 5, 5])
                 dp_mmd, dr_mmd, t3_mmd = select_top3_factors(mmdd_temp)
                 end_results2[model_name]['mmd'] = (dp_mmd, dr_mmd)
                 t3_mmd = sorted(t3_mmd, key=lambda x: x[0])
                 print(' *- MMD', t3_mmd)
+                with open('results/MMDalpha5_INTERdisentanglement_scores_{0}.pkl'.format(now), 'wb') as f:
+                    pickle.dump(end_results2, f) 
          
         with open('results/MMDalpha5_disentanglement_scores_{0}.pkl'.format(now), 'wb') as f:
             pickle.dump(end_results2, f)      
 
-            
-        # writer.writerow([model_name, 'MMD', dp_mmd, dr_mmd, t3_mmd, 'KS', dp_mmd, dr_mmd, t3_mmd])
+        base_colors = ['black', 'b', 'r',  'g', 'c', 'm']
         model_group1 = ['vae' + str(i) for i in range(1, 7)]
         model_group2 = ['vae' + str(i) for i in range(7, 10)] + ['gan' + str(i) for i in range(1, 4)]
-        plt.figure(12)
-        plt.clf()
-        plt.subplot(1, 2, 1)
+        fig3 = plt.figure(constrained_layout=True, figsize=(5,5))
+        gs = fig3.add_gridspec(2, 3)
+        
+        f3_ax1 = fig3.add_subplot(gs[0, 0])
+        f3_ax1.set_xlim((1-0.005, 1.005))
+        f3_ax1.set_xticks([1.0-0.002])
+        f3_ax1.set_xticklabels([])
+        f3_ax1.tick_params(axis='x', length=0)
+        # f3_ax1.set_ylim((0.8, 1.8))
+        f3_ax1.set_title('MMD Aggregated\ndisentanglement scores')
+        
+        f3_ax2 = fig3.add_subplot(gs[0, 1:])
+        f3_ax2.set_ylim((0.28, 1.02))
+        f3_ax2.set_yticks([0.333, 0.666, 1.0])
+        f3_ax2.set_yticklabels(['1/3', '2/3', '3/3'])
+        f3_ax2.set_ylabel('disentangling recall')
+        f3_ax2.set_xlim((0.4, 0.9))
+        f3_ax2.set_title('MMD disentanglement scores')
+        
+        f3_ax3 = fig3.add_subplot(gs[1, 0])
+        f3_ax3.set_xlim((1-0.005, 1.005))
+        f3_ax3.set_xticks([1.0-0.002])
+        f3_ax3.set_xticklabels([])
+        f3_ax3.tick_params(axis='x', length=0)
+        # f3_ax3.set_ylim((0.8, 1.8))
+        
+        f3_ax4 = fig3.add_subplot(gs[1, 1:])
+        f3_ax4.set_ylim((0.28, 1.02))
+        f3_ax4.set_yticks([0.333, 0.666, 1.0])
+        f3_ax4.set_yticklabels(['1/3', '2/3', '3/3'])
+        f3_ax4.set_ylabel('disentangling recall')
+        f3_ax4.set_xlim((0.4, 0.9))
+        f3_ax4.set_xlabel('disentangling precision')
+        plt.subplots_adjust(hspace=0.2, wspace=0.5)
+        
         for model in end_results2.keys():
             model_name = model.split('_')[1]
+            x, y = end_results2[model]['mmd']
             if model_name in model_group1:
-                x, y = end_results2[model]['mmd']
-                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend()
-        plt.title('Disentanglement using MMD')
-        plt.xlabel('disentangling precision')
-        plt.ylabel('disentangling recall')
-        plt.ylim((0.28, 1.02))
-        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
+                i = model_group1.index(model_name)
+                f3_ax1.scatter(1.0-0.002, x+y, alpha=0.5, label=model_name, 
+                               marker='D', color=base_colors[i])
+                f3_ax1.legend()
+                f3_ax2.scatter(x, y, alpha=0.5, label=model_name, marker='D',
+                               color=base_colors[i])
+            else:
+                i = model_group2.index(model_name)
+                f3_ax3.scatter(1.0-0.002, x+y, alpha=0.5, label=model_name, 
+                               marker='D', color=base_colors[i])
+                f3_ax3.legend()
+                f3_ax4.scatter(x, y, alpha=0.5, label=model_name, marker='D',
+                               color=base_colors[i])
+            
+        ax1_handles, ax1_labels = f3_ax1.get_legend_handles_labels()
+        ax1_labels, ax1_handles = zip(*sorted(zip(ax1_labels, ax1_handles), key=lambda t: t[0]))
+        f3_ax1.legend(ax1_handles, ax1_labels)
+
+        ax3_handles, ax3_labels = f3_ax3.get_legend_handles_labels()
+        ax3_labels, ax3_handles = zip(*sorted(zip(ax3_labels, ax3_handles), key=lambda t: t[0]))
+        ax3_labels_new = ax3_labels[3:] + ax3_labels[:3]
+        ax3_handles_new = ax3_handles[3:] + ax3_handles[:3]
+        f3_ax3.legend(ax3_handles_new, ax3_labels_new)
         
-        plt.subplot(1, 2, 2)
+        
+        base_colors = {'vae7': 'black', 'vae8': 'b', 'vae9': 'r', 
+                       'gan1': 'g', 'gan2': 'c', 'gan3': 'm'}
+        group = model_group2
+        agg_results = []
         for model in end_results2.keys():
             model_name = model.split('_')[1]
-            if model_name in model_group2:
+            if model_name in group:
                 x, y = end_results2[model]['mmd']
-                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend()
-        plt.title('Disentanglement using MMD')
-        plt.xlabel('disentangling precision')
-        plt.ylabel('disentangling recall')
-        plt.ylim((0.28, 1.02))
-        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
-        plt.show()
+                agg_results.append((model_name, x+y))
+        agg_results = sorted(agg_results, key=lambda x: x[1], reverse=True)
+        agg_results_names, agg_results_res = zip(*agg_results)
         
-        end_results3 = {key: np.sum(end_results2[key]['ks']) for key in end_results2.keys()}
-        plt.figure(13)
-        plt.clf()
-        plt.subplot(1, 2, 1)
-        for model in end_results3.keys():
+        fig2 = plt.figure(constrained_layout=True, figsize=(5, 5))
+        gs = fig3.add_gridspec(1, 2, width_ratios=[1, 2])
+        
+        f3_ax1 = fig2.add_subplot(gs[0, 0])
+        f3_ax1.set_yticks(np.arange(len(group)) + 1)
+        f3_ax1.set_yticklabels(agg_results_names[::-1])
+        f3_ax1.set_title('MMD Aggregated disentanglement scores')
+        
+        f3_ax2 = fig2.add_subplot(gs[0, 1:])
+        f3_ax2.set_ylim((0.28, 1.02))
+        f3_ax2.set_yticks([0.333, 0.666, 1.0])
+        f3_ax2.set_yticklabels(['1/3', '2/3', '3/3'])
+        f3_ax2.set_ylabel('disentangling recall')
+        f3_ax2.set_xlim((0.4, 0.9))
+        f3_ax4.set_xlabel('disentangling precision')
+        f3_ax2.set_title('MMD disentanglement scores')
+ 
+        
+        for model in end_results2.keys():
             model_name = model.split('_')[1]
-            if model_name in model_group1:
-                y = end_results3[model]
-                plt.scatter(1, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend()
-        plt.title('Disentanglement using MMD')
-        plt.xlabel('disentangling precision')
-        plt.ylabel('disentangling recall')
+            x, y = end_results2[model]['mmd']
+            if model_name in group:
+                i = len(agg_results_names) - agg_results_names.index(model_name)
+                res = agg_results_res[agg_results_names.index(model_name)]
+                
+                f3_ax1.barh(i, res, align='center', label=model_name, 
+                            color=base_colors[model_name], height=0.5)
+                
+                f3_ax1.legend()
+                f3_ax2.scatter(x, y, s=100, alpha=0.8, label=model_name, marker='D',
+                               color=base_colors[model_name])
+            
+        ax1_handles, ax1_labels = f3_ax1.get_legend_handles_labels()
+        ax1_labels, ax1_handles = zip(*sorted(zip(ax1_labels, ax1_handles), key=lambda t: t[0]))
+        f3_ax1.legend(ax1_handles, ax1_labels)
+        ax1_labels_new = ax1_labels[3:] + ax1_labels[:3]
+        ax1_handles_new = ax1_handles[3:] + ax1_handles[:3]
+        f3_ax1.legend(ax1_handles_new, ax1_labels_new)
+        plt.subplots_adjust(hspace=0.2, wspace=0.5)
         
         
-        plt.subplot(1, 2, 2)
-        for model in end_results3.keys():
+        base_colors = {'vae1': 'black', 'vae2': 'b', 'vae3': 'r', 
+                       'vae4': 'g', 'vae5': 'c', 'vae6': 'm'}
+        group = model_group1
+        agg_results = []
+        for model in end_results2.keys():
             model_name = model.split('_')[1]
-            if model_name in model_group2:
-                y = end_results3[model]
-                plt.scatter(1, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend()
-        plt.title('Disentanglement using MMD')
-        plt.xlabel('disentangling precision')
-        plt.ylabel('disentangling recall')
+            if model_name in group:
+                x, y = end_results2[model]['mmd']
+                agg_results.append((model_name, x+y))
+        agg_results = sorted(agg_results, key=lambda x: x[1], reverse=True)
+        agg_results_names, agg_results_res = zip(*agg_results)
         
-        plt.show()
-    
+        fig2 = plt.figure(constrained_layout=True, figsize=(5, 5))
+        gs = fig3.add_gridspec(1, 2, width_ratios=[1, 2])
+        
+        f3_ax1 = fig2.add_subplot(gs[0, 0])
+        f3_ax1.set_yticks(np.arange(len(group)) + 1)
+        f3_ax1.set_yticklabels(agg_results_names[::-1])
+        f3_ax1.set_title('MMD Aggregated disentanglement scores')
+        
+        f3_ax2 = fig2.add_subplot(gs[0, 1:])
+        f3_ax2.set_ylim((0.28, 1.02))
+        f3_ax2.set_yticks([0.333, 0.666, 1.0])
+        f3_ax2.set_yticklabels(['1/3', '2/3', '3/3'])
+        f3_ax2.set_ylabel('disentangling recall')
+        f3_ax2.set_xlim((0.4, 0.9))
+        f3_ax4.set_xlabel('disentangling precision')
+        f3_ax2.set_title('MMD disentanglement scores')
+ 
+        
+        for model in end_results2.keys():
+            model_name = model.split('_')[1]
+            x, y = end_results2[model]['mmd']
+            if model_name in group:
+                i = len(agg_results_names) - agg_results_names.index(model_name)
+                res = agg_results_res[agg_results_names.index(model_name)]
+                
+                f3_ax1.barh(i, res, align='center', label=model_name, 
+                            color=base_colors[model_name], height=0.5)
+                
+                f3_ax1.legend()
+                f3_ax2.scatter(x, y, s=100, alpha=0.8, label=model_name, marker='D',
+                               color=base_colors[model_name])
+            
+        ax1_handles, ax1_labels = f3_ax1.get_legend_handles_labels()
+        ax1_labels, ax1_handles = zip(*sorted(zip(ax1_labels, ax1_handles), key=lambda t: t[0]))
+        f3_ax1.legend(ax1_handles, ax1_labels)
+        plt.subplots_adjust(hspace=0.2, wspace=0.5)
+
+        
             
         
                 
@@ -568,7 +679,7 @@ if __name__ == '__main__':
         f3_ax1.set_xticks([1.0-0.002])
         f3_ax1.set_xticklabels([])
         f3_ax1.tick_params(axis='x', length=0)
-        f3_ax1.set_ylim((1.1, 1.8))
+        f3_ax1.set_ylim((0.6, 1.6))
         f3_ax1.set_title('MMD Aggregated\ndisentanglement scores')
         
         f3_ax2 = fig3.add_subplot(gs[0, 1:])
@@ -576,7 +687,7 @@ if __name__ == '__main__':
         f3_ax2.set_yticks([0.333, 0.666, 1.0])
         f3_ax2.set_yticklabels(['1/3', '2/3', '3/3'])
         f3_ax2.set_ylabel('disentangling recall')
-        f3_ax2.set_xlim((0.45, 0.9))
+        f3_ax2.set_xlim((0.375, 0.55))
         f3_ax2.set_title('MMD disentanglement scores')
         
         f3_ax3 = fig3.add_subplot(gs[1, 0])
@@ -584,14 +695,14 @@ if __name__ == '__main__':
         f3_ax3.set_xticks([1.0-0.002])
         f3_ax3.set_xticklabels([])
         f3_ax3.tick_params(axis='x', length=0)
-        f3_ax3.set_ylim((1.1, 1.8))
+        f3_ax3.set_ylim((0.6, 1.6))
         
         f3_ax4 = fig3.add_subplot(gs[1, 1:])
         f3_ax4.set_ylim((0.28, 1.02))
         f3_ax4.set_yticks([0.333, 0.666, 1.0])
         f3_ax4.set_yticklabels(['1/3', '2/3', '3/3'])
         f3_ax4.set_ylabel('disentangling recall')
-        f3_ax4.set_xlim((0.45, 0.9))
+        f3_ax4.set_xlim((0.375, 0.55))
         f3_ax4.set_xlabel('disentangling precision')
         plt.subplots_adjust(hspace=0.2, wspace=0.5)
         
