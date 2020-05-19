@@ -4,5 +4,7 @@ dataset
 *.pt
 *.npz
 *.pth
+*.pkl
 models
+results/prd_per_model
 train_mnist_laptoptesting.py

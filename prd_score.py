@@ -263,7 +263,7 @@ def prd_to_max_f_beta_pair(precision, recall, beta=8):
 
 
 def plot(precision_recall_pairs, labels=None, out_path=None,
-         legend_loc='lower left', dpi=300):
+         legend_loc='lower left', dpi=100, color_list=None):
   """Plots precision recall curves for distributions.
 
   Creates the PRD plot for the given data and stores the plot in a given path.
@@ -289,14 +289,15 @@ def plot(precision_recall_pairs, labels=None, out_path=None,
         'precision_recall_pairs %d.'
         % (len(labels), len(precision_recall_pairs)))
 
-  fig = plt.figure(figsize=(3.5, 3.5), dpi=dpi)
+  fig = plt.figure(figsize=(6, 3), dpi=dpi)
   plot_handle = fig.add_subplot(111)
   plot_handle.tick_params(axis='both', which='major', labelsize=12)
 
   for i in range(len(precision_recall_pairs)):
     precision, recall = precision_recall_pairs[i]
     label = labels[i] if labels is not None else None
-    plt.plot(recall, precision, label=label, alpha=0.5, linewidth=3)
+    plt.plot(recall, precision, label=label, alpha=0.5, linewidth=3,
+             color=color_list[i])
 
   if labels is not None:
     plt.legend(loc=legend_loc)

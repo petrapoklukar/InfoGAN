@@ -12,7 +12,7 @@ import torch
 import math
 import numpy as np
 from collections import OrderedDict
-
+import torch.nn.functional as F
         
 # ---------------------------------------- #
 # --- Linear Generator & Distriminator --- #
@@ -172,6 +172,31 @@ class FullyConnectedQNet(nn.Module):
         return self.forward_pass(x)
 
     
+class FullyConnecteDecoder(nn.Module):
+    def __init__(self, input_size, output_size):
+        super(FullyConnecteDecoder, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+
+        self.fc1 = nn.Linear(input_size, 128)
+        self.fc2 = nn.Linear(128, 256)
+        self.fc3 = nn.Linear(256, 512)
+        self.fc4 = nn.Linear(512, output_size)
+
+        self.bn1 = nn.BatchNorm1d(128)
+        self.bn2 = nn.BatchNorm1d(256)
+        self.bn3 = nn.BatchNorm1d(512)
+
+    def forward(self, x):
+        x = F.relu(self.bn1(self.fc1(x)))
+        x = F.relu(self.bn2(self.fc2(x)))
+        x = F.relu(self.bn3(self.fc3(x)))
+        x = self.fc4(x)
+        return x
+
+
+
+# ------------------- ARCHIVED ------------------- #
 # From the first InfoGAN implementation   
 class FullyConnectedGenerator_archived(nn.Module):
     def __init__(self, gen_config, data_config):
