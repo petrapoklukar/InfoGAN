@@ -289,7 +289,7 @@ def plot(precision_recall_pairs, labels=None, out_path=None,
         'precision_recall_pairs %d.'
         % (len(labels), len(precision_recall_pairs)))
 
-  fig = plt.figure(figsize=(6, 3), dpi=dpi)
+  fig = plt.figure(figsize=(10, 5), dpi=dpi)
   plot_handle = fig.add_subplot(111)
   plot_handle.tick_params(axis='both', which='major', labelsize=12)
 

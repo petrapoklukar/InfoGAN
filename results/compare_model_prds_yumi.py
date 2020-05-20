@@ -31,15 +31,16 @@ class TrajDataset(Dataset):
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = device
+            
         self.np_data = np.load(data_filename)
         self.min = np.min(self.np_data, axis=0)
         self.max = np.max(self.np_data, axis=0)
         unit_scaled = (self.np_data - self.min) / (self.max - self.min)
         self.data_scaled = 2 * unit_scaled - 1
         if scaled:
-            self.data = torch.from_numpy(self.data_scaled).float()
+            self.data = torch.from_numpy(self.data_scaled).float().to(self.device)
         else: 
-            self.data = torch.from_numpy(self.np_data)
+            self.data = torch.from_numpy(self.np_data).float().to(self.device)
         self.num_samples = self.data.shape[0]                
     
     def get_subset(self, max_ind, n_points, fixed_indices=None, reshape=True):
@@ -87,9 +88,9 @@ def compare_gan_prd(configs, baseline_indices=None, random_seed=1201,
     prd_dict = {config_name: {
         'prd_data': [], 'F8_data': [], 'prd_names': []} for config_name in configs}
     parent_dir = '../'
+    prd_models = []   
+    prd_scores = []
     for config_name in configs:
-        prd_scores = []
-        prd_models = []   
         # Load model config
         config_file = os.path.join(parent_dir, 'configs', config_name + '.py')
         export_directory = os.path.join(parent_dir, 'models', config_name)
@@ -116,7 +117,7 @@ def compare_gan_prd(configs, baseline_indices=None, random_seed=1201,
         
         # Get the ground truth np array from the test split
         path_to_data = parent_dir + config_file['data_config']['path_to_data']
-        test_dataset = TrajDataset(path_to_data, device, scaled=True)
+        test_dataset = TrajDataset(path_to_data, device, scaled=False)
         ref_np = test_dataset.get_subset(len(test_dataset), n_prd_samples,
                                                   fixed_indices=baseline_indices)
     
@@ -124,8 +125,9 @@ def compare_gan_prd(configs, baseline_indices=None, random_seed=1201,
         with torch.no_grad():
             z_noise, con_noise = model.ginput_noise(n_prd_samples)
             eval_data = model.g_forward(z_noise, con_noise)
-            eval_np = eval_data.cpu().numpy().reshape(n_prd_samples, -1)
-            
+            print(eval_data.min(), eval_data.max())
+            eval_np = test_dataset.descale(eval_data).reshape(n_prd_samples, -1)
+            print(eval_np.min(), eval_np.max())
 
         # Load the chpt
         chpr_prd_list = []
@@ -154,7 +156,8 @@ def compare_gan_prd(configs, baseline_indices=None, random_seed=1201,
         prd_dict[config_name]['prd_data'] = all_prd_data
         prd_dict[config_name]['F8_data'] = F8_data
 
-        all_names = ['_'.join(config_name.split('_')[-3:])] + chpnt_list
+        infogan_name = infogan_name_to_index(config_name)
+        all_names = [infogan_name] + chpnt_list
         prd_models += all_names
         prd_dict[config_name]['prd_names'] = all_names
         
@@ -181,6 +184,28 @@ def compare_gan_prd(configs, baseline_indices=None, random_seed=1201,
         # plot_name = 'prd_per_model/descaled{0}_yumi_fixedBaseline{1}_seed_{2}prds.png'.format(
         #     config_name, int(0 if baseline_indices is None else 1), random_seed)
         # prd.plot(prd_scores, short_model_names, out_path=plot_name, color_list=color_list)
+    plt.figure(3)
+    plt.clf()
+    for config_name in prd_dict.keys():
+        label = prd_dict[config_name]['prd_names'][0]
+        plt.scatter(prd_dict[config_name]['F8_data'][0][0], 
+                    prd_dict[config_name]['F8_data'][0][1], label=label)
+    plt.legend()
+    plt.title('InfoGAN F8')
+    plt.xlabel('F8 (recall)')
+    plt.ylabel('F1/8 (precision)')
+    plot_name_F8 = 'prd_per_model/infogans_yumi_fixedBaseline{0}_seed_{1}F8'.format(
+        int(0 if baseline_indices is None else 1), random_seed)
+    plt.savefig(plot_name_F8)
+    plt.xlim((0, 1))
+    plt.ylim((0, 1))
+    plt.savefig(plot_name_F8 + '_normalised')
+    plt.close()
+    
+    plot_name = 'prd_per_model/infogans_yumi_fixedBaseline{0}_seed_{1}prds.png'.format(
+        int(0 if baseline_indices is None else 1), random_seed)
+    prd.plot(prd_scores, list(prd_dict.keys()), out_path=plot_name, color_list=color_list)
+    
     return prd_dict
 
 
@@ -213,7 +238,7 @@ def compare_vae_prd(config_dict, baseline_indices, random_seed=1201,
         
         # Get the ground truth np array from the test split
         path_to_data = parent_dir + 'dataset/robot_trajectories/yumi_joint_pose.npy'
-        test_dataset = TrajDataset(path_to_data, device, scaled=True)
+        test_dataset = TrajDataset(path_to_data, device, scaled=False)
         ref_np = test_dataset.get_subset(len(test_dataset), n_prd_samples,
                                          fixed_indices=baseline_indices)
     
@@ -221,7 +246,7 @@ def compare_vae_prd(config_dict, baseline_indices, random_seed=1201,
         with torch.no_grad():
             z_noise = torch.empty((n_prd_samples, ld), device=device).normal_()
             eval_data = model(z_noise)
-            eval_np = test_dataset.scale(eval_data).reshape(n_prd_samples, -1)
+            eval_np = eval_data.reshape(n_prd_samples, -1)
             
         # Compute and save prd 
         prd_data = prd.compute_prd_from_embedding(eval_np, ref_np)
@@ -231,29 +256,32 @@ def compare_vae_prd(config_dict, baseline_indices, random_seed=1201,
         prd_dict[config_name]['prd_data'] = [prd_data]
         prd_dict[config_name]['F8_data'] = F8_data
 
-        prd_dict[config_name]['prd_names'] = config_name
+        vae_name = ''.join(config_name.split('_'))
+        prd_dict[config_name]['prd_names'] = vae_name
         
-    # plt.figure(3)
-    # plt.clf()
-    # for config_name in prd_dict.keys():
-    #     plt.scatter(prd_dict[config_name]['F8_data'][0][0], 
-    #                 prd_dict[config_name]['F8_data'][0][1], label=config_name)
-    # plt.legend()
-    # plt.title('VAE F8')
-    # plt.xlabel('F8 (recall)')
-    # plt.ylabel('F1/8 (precision)')
-    # plot_name_F8 = 'prd_per_model/vaes_yumi_fixedBaseline{0}_seed_{1}F8'.format(
-    #     int(0 if baseline_indices is None else 1), random_seed)
-    # plt.savefig(plot_name_F8)
-    # plt.xlim((0, 1))
-    # plt.ylim((0, 1))
-    # plt.savefig(plot_name_F8 + '_normalised')
-    # plt.close()
+    plt.figure(3)
+    plt.clf()
+    for config_name in prd_dict.keys():
+        label = prd_dict[config_name]['prd_names']
+        plt.scatter(prd_dict[config_name]['F8_data'][0][0], 
+                    prd_dict[config_name]['F8_data'][0][1], label=label)
+    plt.legend()
+    plt.title('VAE F8')
+    plt.xlabel('F8 (recall)')
+    plt.ylabel('F1/8 (precision)')
+    plot_name_F8 = 'prd_per_model/vaes_yumi_fixedBaseline{0}_seed_{1}F8'.format(
+        int(0 if baseline_indices is None else 1), random_seed)
+    plt.savefig(plot_name_F8)
+    plt.xlim((0, 1))
+    plt.ylim((0, 1))
+    plt.savefig(plot_name_F8 + '_normalised')
+    plt.close()
     
 
-    # plot_name = 'prd_per_model/vaes_yumi_fixedBaseline{0}_seed_{1}prds.png'.format(
-    #     int(0 if baseline_indices is None else 1), random_seed)
-    # prd.plot(prd_scores, list(prd_dict.keys()), out_path=plot_name, color_list=color_list)
+    plot_name = 'prd_per_model/vaes_yumi_fixedBaseline{0}_seed_{1}prds.png'.format(
+        int(0 if baseline_indices is None else 1), random_seed)
+    prd.plot(prd_scores, list(prd_dict.keys()), out_path=plot_name, 
+             color_list=color_list)
     return prd_dict
     
 
@@ -279,9 +307,9 @@ def plot_dgm_prds(vae_res_dict, infogan_res_dict):
     group4 = ['gan' + str(i) for i in range(6, 10)]
     
     ylim = (0.8, 1)
-    xlim = (0.5, 1)
-    ylim = (0, 1)
-    xlim = (0, 1)
+    xlim = (0.55, 1)
+    # ylim = (0, 1)
+    # xlim = (0, 1)
     plt.figure(5)
     # plt.suptitle('PRD F8')
     
@@ -333,6 +361,124 @@ def plot_dgm_prds(vae_res_dict, infogan_res_dict):
     plt.legend()
     plt.show()
     
+    
+def get_vae_samples(config_name, ld, baseline_indices):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # Load the trained model
+    filename = '../models/VAEs/{}.mdl'.format(config_name)
+    model = models.FullyConnecteDecoder(ld, 7*79)
+    model_dict = {}
+    for k, v in torch.load(filename, map_location=device).items():
+        if 'decoder' in k:
+            k_new = '.'.join(k.split('.')[1:])
+            model_dict[k_new] = v
+    model.load_state_dict(model_dict)
+
+    # Number of samples to calculate PR on
+    n_prd_samples = len(baseline_indices)
+    
+    # Get the ground truth np array from the test split
+    path_to_data = '../dataset/robot_trajectories/yumi_joint_pose.npy'
+    test_dataset = TrajDataset(path_to_data, device, scaled=False)
+    ref_np = test_dataset.get_subset(
+        len(test_dataset), n_prd_samples, fixed_indices=baseline_indices, 
+        reshape=False).transpose(0, 2, 1)
+
+    # Get the sampled np array
+    with torch.no_grad():
+        z_noise = torch.empty((n_prd_samples, ld), device=device).normal_()
+        eval_np = model(z_noise).detach().numpy().reshape(-1, 7, 79).transpose(0, 2, 1)
+    return ref_np, eval_np
+    
+
+def get_infogan_samples(config_name, ld, baseline_indices):
+    parent_dir = '../'
+    config_file = os.path.join(parent_dir, 'configs', config_name + '.py')
+    export_directory = os.path.join(parent_dir, 'models', config_name)
+
+    print(' *- Config name: {0}'.format(config_name))
+    
+    config_file = SourceFileLoader(config_name, config_file).load_module().config 
+    config_file['train_config']['exp_name'] = config_name
+    config_file['train_config']['exp_dir'] = export_directory # the place where logs, models, and other stuff will be stored
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    config_file['train_config']['device'] = device
+    print('Device is: {}'.format(device))
+
+    # Load the trained model
+    model = infogan.InfoGAN(config_file)
+    eval_config = config_file['eval_config']
+    eval_config['filepath'] = parent_dir + eval_config['filepath'].format(config_name)
+    model.load_model(eval_config)
+    print(eval_config)
+
+    # Number of samples to calculate PR on
+    n_prd_samples = eval_config['n_prd_samples']
+    
+    # Get the ground truth np array from the test split
+    path_to_data = parent_dir + config_file['data_config']['path_to_data']
+    test_dataset = TrajDataset(path_to_data, device, scaled=False)
+    ref_np = test_dataset.get_subset(
+        len(test_dataset), n_prd_samples, fixed_indices=baseline_indices, 
+        reshape=False).transpose(0, 2, 1)
+
+    # Get the sampled np array
+    with torch.no_grad():
+        z_noise, con_noise = model.ginput_noise(n_prd_samples)
+        eval_data = model.g_forward(z_noise, con_noise)
+        eval_np = test_dataset.descale(eval_data).reshape(-1, 7, 79).transpose(0, 2, 1)
+    return ref_np, eval_np
+
+
+def plot_example_traj(vae_ref_np, vae_eval_np, infogan_ref_np, infogan_eval_np):
+        
+    plt.figure(1)
+    plt.clf()
+    
+    plt.subplot(2, 2, 1)
+    mean = np.mean(vae_ref_np, axis=0)
+    std = np.std(vae_ref_np, axis=0)
+    for i in range(7):
+        x = np.arange(len(mean[:, i]))
+        plt.plot(x, mean[:, i], )
+        plt.fill_between(x, mean[:, i] - std[:, i], 
+                         mean[:, i] + std[:, i], alpha=.1)
+    plt.title('VAE ref')
+    
+    plt.subplot(2, 2, 2)
+    mean = np.mean(vae_eval_np, axis=0)
+    std = np.std(vae_eval_np, axis=0)
+    for i in range(7):
+        x = np.arange(len(mean[:, i]))
+        plt.plot(x, mean[:, i], )
+        plt.fill_between(x, mean[:, i] - std[:, i], 
+                         mean[:, i] + std[:, i], alpha=.1)
+    plt.title('VAE eval')
+    
+    plt.subplot(2, 2, 3)
+    mean = np.mean(infogan_ref_np, axis=0)
+    std = np.std(infogan_ref_np, axis=0)
+    for i in range(7):
+        x = np.arange(len(mean[:, i]))
+        plt.plot(x, mean[:, i], )
+        plt.fill_between(x, mean[:, i] - std[:, i], 
+                         mean[:, i] + std[:, i], alpha=.1)
+    plt.title('InfoGAN ref')
+    
+    plt.subplot(2, 2, 4)
+    mean = np.mean(infogan_eval_np, axis=0)
+    std = np.std(infogan_eval_np, axis=0)
+    for i in range(7):
+        x = np.arange(len(mean[:, i]))
+        plt.plot(x, mean[:, i], )
+        plt.fill_between(x, mean[:, i] - std[:, i], 
+                         mean[:, i] + std[:, i], alpha=.1)
+    plt.title('InfoGAN eval')  
+        
+    plt.show()
+    
 
 if __name__ == '__main__':    
     
@@ -349,23 +495,31 @@ if __name__ == '__main__':
     # with open('vae_prd_res.pkl', 'rb') as f:
     #     vae_res_dict = pickle.load(f)
     
-    # with open('infogan_prd_res.pkl', 'rb') as f:
+    # with open('infogan_prd_res_descled.pkl', 'rb') as f:
     #     infogan_res_dict = pickle.load(f)
-    # infogan_res_dict = compare_gan_prd(
-    #         yumi_gan_models, baseline_indices=base, random_seed=1602, 
-    #         chpnt_list=[], color_list=color_list)
-    # vae_res_dict = compare_vae_prd(yumi_vae_models, base, random_seed=1201, 
-    #                                    color_list=color_list)
-    plot_dgm_prds(vae_res_dict, infogan_res_dict)
+
+    # plot_dgm_prds(vae_res_dict, infogan_res_dict)
+    
+    vae_ref_np, vae_eval_np = get_vae_samples('vae_1', 2, base)
+    infogan_ref_np, infogan_eval_np = get_infogan_samples(
+        'InfoGAN_yumi_l15_s2_SnetS', 2, base)
+    plot_example_traj(vae_ref_np, vae_eval_np, infogan_ref_np, infogan_eval_np)
+
+    
+    
+    
+    
+    
+    
     
     
     
     
     if False:
         vae_res_dict = compare_vae_prd(yumi_vae_models, base, random_seed=1201, 
-                                       color_list=color_list)
+                                        color_list=color_list)
         
-        with open('vae_prd_res_descaled.pkl', 'wb') as f:
+        with open('vae_prd_res.pkl', 'wb') as f:
                 pickle.dump(vae_res_dict, f)
                 
         infogan_res_dict = compare_gan_prd(
