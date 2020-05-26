@@ -7,13 +7,10 @@ Created on Wed Mar 25 10:42:14 2020
 """
 
 import torch
-from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
+from torch.utils.data import Dataset
 import numpy as np
 from importlib.machinery import SourceFileLoader
 import os
-import argparse
 import sys
 sys.path.insert(0,'..')
 import prd_score as prd
@@ -24,6 +21,7 @@ import matplotlib
 matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 import pickle
+
 
 class TrajDataset(Dataset):
     def __init__(self, data_filename, device=None, scaled=True):
@@ -110,7 +108,7 @@ def compare_gan_prd(configs, baseline_indices=None, random_seed=1201,
         eval_config = config_file['eval_config']
         eval_config['filepath'] = parent_dir + eval_config['filepath'].format(config_name)
         model.load_model(eval_config)
-        print(eval_config)
+        # print(eval_config)
     
         # Number of samples to calculate PR on
         n_prd_samples = eval_config['n_prd_samples']
@@ -119,19 +117,26 @@ def compare_gan_prd(configs, baseline_indices=None, random_seed=1201,
         path_to_data = parent_dir + config_file['data_config']['path_to_data']
         test_dataset = TrajDataset(path_to_data, device, scaled=False)
         ref_np = test_dataset.get_subset(len(test_dataset), n_prd_samples,
-                                                  fixed_indices=baseline_indices)
+                                         fixed_indices=baseline_indices)
     
+        test_dataset_gan = TrajDataset(path_to_data, device, scaled=True)
+        ref_gan_np = test_dataset_gan.get_subset(len(test_dataset_gan), n_prd_samples,
+                                         fixed_indices=baseline_indices)
+        
         # Get the sampled np array
         with torch.no_grad():
             z_noise, con_noise = model.ginput_noise(n_prd_samples)
             eval_data = model.g_forward(z_noise, con_noise)
-            print(eval_data.min(), eval_data.max())
-            eval_np = test_dataset.descale(eval_data).reshape(n_prd_samples, -1)
-            print(eval_np.min(), eval_np.max())
+            
+            eval_gan_np = eval_data.numpy().reshape(n_prd_samples, 7, 79)      
+            eval_np = test_dataset.descale(eval_data).reshape(n_prd_samples, 7, 79)
 
+            
+            
         # Load the chpt
         chpr_prd_list = []
         if chpnt_list != []:
+            print('checkpoints: ', chpnt_list)
             for c in chpnt_list:
                 model_chpt = infogan.InfoGAN(config_file)
                 model_chpt.load_checkpoint(
@@ -141,25 +146,43 @@ def compare_gan_prd(configs, baseline_indices=None, random_seed=1201,
                 with torch.no_grad():
                     z_noise, con_noise = model_chpt.ginput_noise(n_prd_samples)
                     eval_chnpt_data = model_chpt.g_forward(z_noise, con_noise)
-                    eval_chnpt_np = eval_chnpt_data.cpu().numpy().reshape(n_prd_samples, -1)
-                prd_chnpt_data = prd.compute_prd_from_embedding(eval_chnpt_np, ref_np)
+                    eval_chnpt_np = eval_chnpt_data.cpu().numpy()
+                    eval_chnpt_smooth_np = moving_average(eval_chnpt_np, n=20).reshape(n_prd_samples, -1)
+                prd_chnpt_data = prd.compute_prd_from_embedding(eval_chnpt_smooth_np, ref_np)
                 chpr_prd_list.append(prd_chnpt_data)
             
         # Compute and save prd 
-        prd_data = prd.compute_prd_from_embedding(eval_np, ref_np)
-        F8_data = [prd.prd_to_max_f_beta_pair(prd_data[0], prd_data[1])] + \
-            list(map(lambda x: prd.prd_to_max_f_beta_pair(x[0], x[1]), 
-                     chpr_prd_list))
+        prd_data_normal = prd.compute_prd_from_embedding(eval_np.reshape(n_prd_samples, -1), ref_np)
+        print('n:', prd.prd_to_max_f_beta_pair(prd_data_normal[0], prd_data_normal[1]))
         
-        all_prd_data = [prd_data] + chpr_prd_list
-        prd_scores += all_prd_data
-        prd_dict[config_name]['prd_data'] = all_prd_data
-        prd_dict[config_name]['F8_data'] = F8_data
+        for i in range(2, 20):
+            eval_np_smooth = moving_average(eval_np, n=i).reshape(n_prd_samples, -1)
+            prec, rec = prd.compute_prd_from_embedding(eval_np_smooth, ref_np)
+            print('s' + str(i) + ':', prd.prd_to_max_f_beta_pair(prec, rec))
+        
+        print('\n')
+        prd_data_normal = prd.compute_prd_from_embedding(eval_gan_np.reshape(n_prd_samples, -1), ref_gan_np)
+        print('n:', prd.prd_to_max_f_beta_pair(prd_data_normal[0], prd_data_normal[1]))
+        
+        for i in range(2, 20):
+            eval_gan_np_smooth = moving_average(eval_gan_np, n=i).reshape(n_prd_samples, -1)
+            prec, rec = prd.compute_prd_from_embedding(eval_gan_np_smooth, ref_gan_np)
+            print('s' + str(i) + ':', prd.prd_to_max_f_beta_pair(prec, rec))
+        
+        # prd_data = prd.compute_prd_from_embedding(eval_np_smooth, ref_np)
+        # F8_data = [prd.prd_to_max_f_beta_pair(prd_data[0], prd_data[1])] + \
+        #     list(map(lambda x: prd.prd_to_max_f_beta_pair(x[0], x[1]), 
+        #              chpr_prd_list))
+        # print(F8_data)
+        # all_prd_data = [prd_data] + chpr_prd_list
+        # prd_scores += all_prd_data
+        # prd_dict[config_name]['prd_data'] = all_prd_data
+        # prd_dict[config_name]['F8_data'] = F8_data
 
-        infogan_name = infogan_name_to_index(config_name)
-        all_names = [infogan_name] + chpnt_list
-        prd_models += all_names
-        prd_dict[config_name]['prd_names'] = all_names
+        # infogan_name = infogan_name_to_index(config_name)
+        # all_names = [infogan_name] + chpnt_list
+        # prd_models += all_names
+        # prd_dict[config_name]['prd_names'] = all_names
         
     
         # plt.figure(3)
@@ -361,8 +384,20 @@ def plot_dgm_prds(vae_res_dict, infogan_res_dict):
     plt.legend()
     plt.show()
     
+
+
+def get_ref_samples(baseline_indices):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    n_prd_samples = len(baseline_indices)
+    path_to_data = '../dataset/robot_trajectories/yumi_joint_pose.npy'
+    test_dataset = TrajDataset(path_to_data, device, scaled=False)
+    ref_np = test_dataset.get_subset(
+        len(test_dataset), n_prd_samples, fixed_indices=baseline_indices, 
+        reshape=False)
+    return ref_np
     
-def get_vae_samples(config_name, ld, baseline_indices):
+
+def get_vae_samples(config_name, ld, n_prd_samples):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Load the trained model
@@ -376,23 +411,23 @@ def get_vae_samples(config_name, ld, baseline_indices):
     model.load_state_dict(model_dict)
 
     # Number of samples to calculate PR on
-    n_prd_samples = len(baseline_indices)
+#    n_prd_samples = len(baseline_indices)
     
-    # Get the ground truth np array from the test split
-    path_to_data = '../dataset/robot_trajectories/yumi_joint_pose.npy'
-    test_dataset = TrajDataset(path_to_data, device, scaled=False)
-    ref_np = test_dataset.get_subset(
-        len(test_dataset), n_prd_samples, fixed_indices=baseline_indices, 
-        reshape=False).transpose(0, 2, 1)
+#    # Get the ground truth np array from the test split
+#    path_to_data = '../dataset/robot_trajectories/yumi_joint_pose.npy'
+#    test_dataset = TrajDataset(path_to_data, device, scaled=False)
+#    ref_np = test_dataset.get_subset(
+#        len(test_dataset), n_prd_samples, fixed_indices=baseline_indices, 
+#        reshape=False).transpose(0, 2, 1)
 
     # Get the sampled np array
     with torch.no_grad():
         z_noise = torch.empty((n_prd_samples, ld), device=device).normal_()
-        eval_np = model(z_noise).detach().numpy().reshape(-1, 7, 79).transpose(0, 2, 1)
-    return ref_np, eval_np
+        eval_np = model(z_noise).detach().numpy().reshape(-1, 7, 79)
+    return eval_np
     
 
-def get_infogan_samples(config_name, ld, baseline_indices):
+def get_infogan_samples(config_name, ld, n_prd_samples, chpnt=''):
     parent_dir = '../'
     config_file = os.path.join(parent_dir, 'configs', config_name + '.py')
     export_directory = os.path.join(parent_dir, 'models', config_name)
@@ -411,25 +446,33 @@ def get_infogan_samples(config_name, ld, baseline_indices):
     model = infogan.InfoGAN(config_file)
     eval_config = config_file['eval_config']
     eval_config['filepath'] = parent_dir + eval_config['filepath'].format(config_name)
-    model.load_model(eval_config)
-    print(eval_config)
+    
+    if chpnt:
+        model.load_checkpoint(
+            '../models/{0}/infogan_checkpoint{1}.pth'.format(config_name, chpnt))
+        model.Gnet.eval()
 
+    else:
+        model.load_model(eval_config)
+        print(eval_config)
+        
     # Number of samples to calculate PR on
-    n_prd_samples = eval_config['n_prd_samples']
+#    n_prd_samples = eval_config['n_prd_samples']
     
     # Get the ground truth np array from the test split
     path_to_data = parent_dir + config_file['data_config']['path_to_data']
     test_dataset = TrajDataset(path_to_data, device, scaled=False)
-    ref_np = test_dataset.get_subset(
-        len(test_dataset), n_prd_samples, fixed_indices=baseline_indices, 
-        reshape=False).transpose(0, 2, 1)
+#    ref_np = test_dataset.get_subset(
+#        len(test_dataset), n_prd_samples, fixed_indices=baseline_indices, 
+#        reshape=False).transpose(0, 2, 1)
 
     # Get the sampled np array
     with torch.no_grad():
         z_noise, con_noise = model.ginput_noise(n_prd_samples)
         eval_data = model.g_forward(z_noise, con_noise)
-        eval_np = test_dataset.descale(eval_data).reshape(-1, 7, 79).transpose(0, 2, 1)
-    return ref_np, eval_np
+        eval_np = test_dataset.descale(eval_data).reshape(-1, 7, 79)
+        # eval_np_smooth = moving_average(eval_np, 20)
+    return eval_np
 
 
 def plot_example_traj(vae_ref_np, vae_eval_np, infogan_ref_np, infogan_eval_np):
@@ -472,18 +515,39 @@ def plot_example_traj(vae_ref_np, vae_eval_np, infogan_ref_np, infogan_eval_np):
     std = np.std(infogan_eval_np, axis=0)
     for i in range(7):
         x = np.arange(len(mean[:, i]))
+        # N = 20
+        # y_padded = np.pad(mean[:, i], (N//2, N-1-N//2), mode='edge')
+        # y_smooth = np.convolve(y_padded, np.ones((N,))/N, mode='valid') 
         plt.plot(x, mean[:, i], )
+        # plt.plot(x, y_smooth, )
         plt.fill_between(x, mean[:, i] - std[:, i], 
                          mean[:, i] + std[:, i], alpha=.1)
     plt.title('InfoGAN eval')  
         
     plt.show()
     
+def moving_average_mean(x, n):
+    axis = 0
+    x_padded = np.pad(x, ((n//2, n-1-n//2), (0, 0)), mode='edge')
+    x_smooth = np.apply_along_axis(lambda ax: np.convolve(ax, np.ones((n,))/n, mode='valid'), 
+                                   axis, x_padded)
+    return x_smooth
+    
+    
+def moving_average(x, n, plot=False):
+    axis = 2
+    y_padded = np.pad(x, ((0, 0), (0, 0), (n//2, n-1-n//2)), mode='edge')
+    if plot:
+        y_padded = np.pad(x, ((0, 0), (n//2, n-1-n//2), (0, 0)), mode='edge')
+        axis = 1
+    y_smooth = np.apply_along_axis(lambda ax: np.convolve(ax, np.ones((n,))/n, mode='valid'), 
+                                   axis, y_padded)
+    return y_smooth 
 
 if __name__ == '__main__':    
     
     max_ind = 10000
-    n_points = 1000
+    n_points = 5000
     base = np.random.choice(max_ind, n_points, replace=False)
     
     yumi_gan_models = get_model_names() 
@@ -500,13 +564,109 @@ if __name__ == '__main__':
 
     # plot_dgm_prds(vae_res_dict, infogan_res_dict)
     
-    vae_ref_np, vae_eval_np = get_vae_samples('vae_1', 2, base)
-    infogan_ref_np, infogan_eval_np = get_infogan_samples(
-        'InfoGAN_yumi_l15_s2_SnetS', 2, base)
-    plot_example_traj(vae_ref_np, vae_eval_np, infogan_ref_np, infogan_eval_np)
+    if False:
+        ref_np = get_ref_samples(base)
+        vae_eval_np = get_vae_samples('vae_1', 2, n_points)
+        infogan_eval_np = get_infogan_samples('InfoGAN_yumi_l15_s2_SnetS', 2, n_points)
+        
+        infogan_eval_np_avg20 = moving_average(infogan_eval_np, n=15, plot=False)
+        infogan_eval_np_avg10 = moving_average(infogan_eval_np, n=10, plot=False)
+        infogan_eval_np_avg5 = moving_average(infogan_eval_np, n=5, plot=False)
+        
+#        plot_example_traj(vae_ref_np, vae_eval_np, infogan_ref_np, infogan_eval_np)
+#        plot_example_traj(vae_ref_np, infogan_eval_np, infogan_ref_np, infogan_eval_np_avg10)
+        
+        import iprd_score as iprd 
+        import tensorflow as tf
+        sess = tf.Session()
+        with sess.as_default():
+            res_gan = iprd.knn_precision_recall_features(
+                        ref_np.reshape(-1, 7*79), 
+                        infogan_eval_np.reshape(-1, 7*79), nhood_sizes=[3],
+                        row_batch_size=500, col_batch_size=100, num_gpus=1)   
+        sess = tf.Session()
+        with sess.as_default():
+            res_gan1 = iprd.knn_precision_recall_features(
+                        ref_np.reshape(-1, 7*79), 
+                        infogan_eval_np_avg10.reshape(-1, 7*79), nhood_sizes=[3],
+                        row_batch_size=500, col_batch_size=100, num_gpus=1)   
+        
+        sess = tf.Session()
+        with sess.as_default():
+            res_gan2 = iprd.knn_precision_recall_features(
+                        ref_np.reshape(-1, 7*79), 
+                        infogan_eval_np_avg20.reshape(-1, 7*79), nhood_sizes=[3],
+                        row_batch_size=500, col_batch_size=100, num_gpus=1)   
+        
+        sess = tf.Session()
+        with sess.as_default():
+            res_gan3 = iprd.knn_precision_recall_features(
+                        ref_np.reshape(-1, 7*79), 
+                        infogan_eval_np_avg20.reshape(-1, 7*79), nhood_sizes=[5],
+                        row_batch_size=500, col_batch_size=100, num_gpus=1)   
+            
+        sess = tf.Session()
+        with sess.as_default():
+            res1 = iprd.knn_precision_recall_features(
+                    ref_np.reshape(-1, 7*79), 
+                    vae_eval_np.reshape(-1, 7*79), nhood_sizes=[3],
+                    row_batch_size=500, col_batch_size=100, num_gpus=1)   
+        
+        
+        prec, rec = prd.compute_prd_from_embedding(
+            np.mean(vae_eval_np, axis=1), 
+            np.mean(vae_ref_np, axis=1), 
+            num_clusters=7) 
+        print(prd.prd_to_max_f_beta_pair(prec, rec))
+        
+        prec, rec = prd.compute_prd_from_embedding(
+            np.mean(infogan_eval_np, axis=1), 
+            np.mean(infogan_ref_np, axis=1), 
+            num_clusters=7) 
+        print(prd.prd_to_max_f_beta_pair(prec, rec))
+        
+        import scipy.signal
+        
+        plt.figure(1)
+        plt.clf()
+        plt.subplot(2, 3, 1)
+        x = np.mean(vae_ref_np, axis=0)
+        for i in range(7):
+            plt.plot(x[:, i])
+            
+        plt.subplot(2, 3, 2)
+        x = np.mean(vae_eval_np, axis=0)
+        for i in range(7):
+            plt.plot(x[:, i])
+            
+        plt.subplot(2, 3, 3)
+        x = scipy.signal.savgol_filter(np.mean(infogan_eval_np, axis=0), 13, 1, axis=0) 
+        for i in range(7):
+            plt.plot(x[:, i])
+        
+        plt.subplot(2, 3, 4)
+        x = np.mean(infogan_ref_np, axis=0)
+        for i in range(7):
+            plt.plot(x[:, i])
+            
+        plt.subplot(2, 3, 5)
+        x = moving_average_mean(np.mean(infogan_eval_np, axis=0), 5)
+        for i in range(7):
+            plt.plot(x[:, i])
+            
+        plt.subplot(2, 3, 6)
+        x = np.mean(infogan_eval_np, axis=0)
+        for i in range(7):
+            plt.plot(x[:, i])
+        plt.show()
 
-    
-    
+        
+        
+        
+        
+        
+
+            
     
     
     

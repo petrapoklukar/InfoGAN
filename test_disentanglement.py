@@ -349,21 +349,9 @@ def select_top3_factors(res_dict):
     
 
 if __name__ == '__main__':
-    model_names = [
-        'data/ppo_gan1_t1.pkl', 
-        'data/ppo_gan2_t1.pkl', 
-        'data/ppo_gan3_t1.pkl', 
-        'data/ppo_vae1_t1.pkl', 
-        'data/ppo_vae2_t1.pkl', 
-        'data/ppo_vae3_t1.pkl', 
-        'data/ppo_vae4_t1.pkl', 
-        'data/ppo_vae5_t1.pkl', 
-        'data/ppo_vae6_t1.pkl', 
-        'data/ppo_vae7_t1.pkl', 
-        'data/ppo_vae8_t1.pkl', 
-        'data/ppo_vae9_t1.pkl'
-        ] 
-    
+    model_names = ['data_all_models/gan{0}'.format(str(i)) for i in range(1, 10)] + \
+    ['data_all_models/vae{0}'.format(str(i)) for i in range(1, 10)]
+   
     gt_data = np.load('dataset/simulation_states/yumi_states.npy')
     gts_data = gt_data[:, (0, 1, -1)]
     
