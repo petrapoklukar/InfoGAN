@@ -48,7 +48,7 @@ class TrajDataset(Dataset):
             self.prd_indices = np.random.choice(max_ind, n_points, replace=False)
         else:
             self.prd_indices = fixed_indices
-        subset_list = [self.data[i].numpy() for i in self.prd_indices]
+        subset_list = [self.data[i].cpu().numpy() for i in self.prd_indices]
         if reshape: 
             return np.array(subset_list).reshape(n_points, -1)
         else: 
@@ -200,12 +200,24 @@ if __name__ == '__main__':
                             infogan_eval_np_avg20.reshape(-1, 7*79), nhood_sizes=[3],
                             row_batch_size=500, col_batch_size=100, num_gpus=1)
                 
+                res5_gan15 = iprd.knn_precision_recall_features(
+                            ref_np.reshape(-1, 7*79), 
+                            infogan_eval_np_avg15.reshape(-1, 7*79), nhood_sizes=[5],
+                            row_batch_size=500, col_batch_size=100, num_gpus=1)
+                
+                res5_gan20 = iprd.knn_precision_recall_features(
+                            ref_np.reshape(-1, 7*79), 
+                            infogan_eval_np_avg20.reshape(-1, 7*79), nhood_sizes=[5],
+                            row_batch_size=500, col_batch_size=100, num_gpus=1)
+                
             final_dict[model] = {
                     'res_gan': res_gan,
                     'res_gan5': res_gan5,
                     'res_gan10': res_gan10,
                     'res_gan15': res_gan15,
                     'res_gan20': res_gan20,
+                    'res5_gan15': res5_gan15,
+                    'res5_gan20': res5_gan20,
                     }
                 
         
