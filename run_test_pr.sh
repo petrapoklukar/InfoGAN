@@ -7,6 +7,8 @@ AT="@"
 # SBATCH_OR_CAT=cat
 SBATCH_OR_CAT=sbatch
 
+RUNS_PATH="${SOURCE_PATH}/test_pr"
+echo $RUNS_PATH
 
 "${SBATCH_OR_CAT}" << HERE
 #!/usr/bin/env bash
@@ -17,7 +19,7 @@ SBATCH_OR_CAT=sbatch
 #SBATCH --constrain="khazadum|rivendell|belegost|shire|gondor"
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=10GB
+#SBATCH --mem=40GB
 
 echo "Sourcing conda.sh"
 source "${HOME}/anaconda3/etc/profile.d/conda.sh"
@@ -27,4 +29,3 @@ nvidia-smi
 
 python test_pr.py 
 HERE
-done

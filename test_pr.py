@@ -233,5 +233,5 @@ if __name__ == '__main__':
             final_dict[model] = {'res_vae': res_vae}
             
             
-        with open('ipr_results_{0}samples.pkl'.format(n_points), 'wb') as f:
+        with open('test_pr/ipr_results_{0}samples.pkl'.format(n_points), 'wb') as f:
             pickle.dump(final_dict, f)
