@@ -161,11 +161,13 @@ if __name__ == '__main__':
     max_ind = 10000
     
     for n_points in [750, 1000, 5000, 7500]:
+        print('Chosen n_points: ', n_points)
         base = np.random.choice(max_ind, n_points, replace=False)
         ref_np = get_ref_samples(base)
         
         final_dict = {}
         for model, ld in yumi_gan_models.items():
+            print('InfoGAN model with ld: ', model, ld)
             infogan_eval_np = get_infogan_samples(model, ld, n_points)
             
             infogan_eval_np_avg20 = moving_average(infogan_eval_np, n=20)
@@ -173,6 +175,7 @@ if __name__ == '__main__':
             infogan_eval_np_avg10 = moving_average(infogan_eval_np, n=10)
             infogan_eval_np_avg5 = moving_average(infogan_eval_np, n=5)
             
+            print('Starting to calculate InfoGAN PR....')
             sess = tf.Session()
             with sess.as_default():
                 res_gan = iprd.knn_precision_recall_features(
@@ -222,7 +225,10 @@ if __name__ == '__main__':
                 
         
         for model, ld in yumi_vae_models.items():
+            print('VAE model with ld: ', model, ld)
             vae_eval_np = get_vae_samples('vae1', 2, n_points)
+
+            print('Starting to calculate InfoGAN PR....')
             sess = tf.Session()
             with sess.as_default():     
                 res_vae = iprd.knn_precision_recall_features(
@@ -232,6 +238,6 @@ if __name__ == '__main__':
         
             final_dict[model] = {'res_vae': res_vae}
             
-            
+        print('Results ready ', final_dict)
         with open('test_pr/ipr_results_{0}samples.pkl'.format(n_points), 'wb') as f:
             pickle.dump(final_dict, f)
