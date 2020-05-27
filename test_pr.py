@@ -94,6 +94,7 @@ def get_vae_samples(config_name, ld, n_prd_samples):
             k_new = '.'.join(k.split('.')[1:])
             model_dict[k_new] = v
     model.load_state_dict(model_dict)
+    model = model.to(device)
 
     # Get the sampled np array
     with torch.no_grad():
@@ -111,6 +112,7 @@ def get_infogan_samples(config_name, ld, n_prd_samples, chpnt=''):
     filename = 'models/models/{0}.pt'.format(config_name)
     model_dict = torch.load(filename, map_location=device)
     model.load_state_dict(model_dict)
+    model = model.to(device)
     
     # Get the ground truth np array from the test split
     path_to_data = 'dataset/robot_trajectories/yumi_joint_pose.npy'
@@ -119,6 +121,9 @@ def get_infogan_samples(config_name, ld, n_prd_samples, chpnt=''):
     # Get the sampled np array
     with torch.no_grad():
         z_noise = torch.empty((n_prd_samples, ld), device=device).uniform_(-1, 1)
+        print(z_noise.shape)
+        print(z_noise.dtype)
+        print(type(z_noise))
         eval_data = model(z_noise).detach()
         eval_np = test_dataset.descale(eval_data).reshape(-1, 7, 79)
     return eval_np
