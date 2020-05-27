@@ -18,7 +18,7 @@ from itertools import groupby
 import InfoGAN_yumi as infogan
 import InfoGAN_models as models
 import matplotlib
-matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
+matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 import pickle
 import iprd_score as iprd 
@@ -162,87 +162,171 @@ if __name__ == '__main__':
     yumi_gan_models = {model: index_to_ld(int(model.split('_')[0][-1])) \
         for model in gan_configs}
     yumi_vae_models = {'vae' + str(i): index_to_ld(i) for i in range(1, 10)}
+    evaluate = False
+    analyse = True
     
-    max_ind = 10000
+    if analyse:
+        with open('test_pr/ipr_results_7500samples.pkl', 'rb') as f:
+            data_o = pickle.load(f)
+        
+        data = {}    
+        for key, value in data_o.items():
+            if 'infogan' in key:
+                new_key = key.split('_')[0][4:]
+                data[new_key] = value
+            else:
+                data[key] = value
     
-    for n_points in [750, 1000, 5000, 7500]:
-        print('Chosen n_points: ', n_points)
-        base = np.random.choice(max_ind, n_points, replace=False)
-        ref_np = get_ref_samples(base)
-        
-        final_dict = {}
-        for model, ld in yumi_gan_models.items():
-            print('InfoGAN model with ld: ', model, ld)
-            infogan_eval_np = get_infogan_samples(model, ld, n_points)
+        # plot the results
+        vae_group1 = ['vae' + str(i) for i in range(1, 6)]
+        vae_group2 = ['vae' + str(i) for i in range(6, 10)]
+        gan_group1 = ['gan' + str(i) for i in range(1, 6)]
+        gan_group2 = ['gan' + str(i) for i in range(6, 10)]
+    
+        def plot_ipr():
+            # ------------- Plot IPR results
+            plt.figure(12)
+            plt.clf()
+            plt.suptitle('Improved PR scores')
+            gan_smooth = 'res_gan20'
+            vae_res = 'res_vae'
+            xlim = (0.5, 1)
+            ylim = (0.2, 0.7)
+            limit_axis = False
+            plt.subplot(2, 2, 1)
+            for model_name in data.keys():
+                if model_name in vae_group1:
+                    x = data[model_name][vae_res]['precision']
+                    y = data[model_name][vae_res]['recall']
+                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+            plt.legend()
+            if limit_axis:
+                plt.xlim(xlim)
+                plt.ylim(ylim)
+            plt.ylabel('disentangling recall')
             
-            infogan_eval_np_avg20 = moving_average(infogan_eval_np, n=20)
-            infogan_eval_np_avg15 = moving_average(infogan_eval_np, n=15)
-            infogan_eval_np_avg10 = moving_average(infogan_eval_np, n=10)
-            infogan_eval_np_avg5 = moving_average(infogan_eval_np, n=5)
+            plt.subplot(2, 2, 2)
+            for model_name in data.keys():
+                if model_name in vae_group2:
+                    x = data[model_name][vae_res]['precision']
+                    y = data[model_name][vae_res]['recall']
+                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+            plt.legend()
+            if limit_axis:
+                plt.xlim(xlim)
+                plt.ylim(ylim)
             
-            print('Starting to calculate InfoGAN PR....')
-            sess = tf.Session()
-            with sess.as_default():
-                res_gan = iprd.knn_precision_recall_features(
-                            ref_np.reshape(-1, 7*79), 
-                            infogan_eval_np.reshape(-1, 7*79), nhood_sizes=[3],
-                            row_batch_size=500, col_batch_size=100, num_gpus=1)
-                
-                res_gan5 = iprd.knn_precision_recall_features(
-                            ref_np.reshape(-1, 7*79), 
-                            infogan_eval_np_avg5.reshape(-1, 7*79), nhood_sizes=[3],
-                            row_batch_size=500, col_batch_size=100, num_gpus=1)
-                
-                res_gan10 = iprd.knn_precision_recall_features(
-                            ref_np.reshape(-1, 7*79), 
-                            infogan_eval_np_avg10.reshape(-1, 7*79), nhood_sizes=[3],
-                            row_batch_size=500, col_batch_size=100, num_gpus=1)
-                
-                res_gan15 = iprd.knn_precision_recall_features(
-                            ref_np.reshape(-1, 7*79), 
-                            infogan_eval_np_avg15.reshape(-1, 7*79), nhood_sizes=[3],
-                            row_batch_size=500, col_batch_size=100, num_gpus=1)
-                
-                res_gan20 = iprd.knn_precision_recall_features(
-                            ref_np.reshape(-1, 7*79), 
-                            infogan_eval_np_avg20.reshape(-1, 7*79), nhood_sizes=[3],
-                            row_batch_size=500, col_batch_size=100, num_gpus=1)
-                
-                res5_gan15 = iprd.knn_precision_recall_features(
-                            ref_np.reshape(-1, 7*79), 
-                            infogan_eval_np_avg15.reshape(-1, 7*79), nhood_sizes=[5],
-                            row_batch_size=500, col_batch_size=100, num_gpus=1)
-                
-                res5_gan20 = iprd.knn_precision_recall_features(
-                            ref_np.reshape(-1, 7*79), 
-                            infogan_eval_np_avg20.reshape(-1, 7*79), nhood_sizes=[5],
-                            row_batch_size=500, col_batch_size=100, num_gpus=1)
-                
-            final_dict[model] = {
-                    'res_gan': res_gan,
-                    'res_gan5': res_gan5,
-                    'res_gan10': res_gan10,
-                    'res_gan15': res_gan15,
-                    'res_gan20': res_gan20,
-                    'res5_gan15': res5_gan15,
-                    'res5_gan20': res5_gan20,
-                    }
-                
+            plt.subplot(2, 2, 3)
+            for model_name in data.keys():
+                if model_name in gan_group1:
+                    x = data[model_name][gan_smooth]['precision']
+                    y = data[model_name][gan_smooth]['recall']
+                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+            plt.legend()
+            if limit_axis:
+                plt.xlim(xlim)
+                plt.ylim(ylim)
+            plt.xlabel('disentangling precision')
+            plt.ylabel('disentangling recall')
+            
+            plt.subplot(2, 2, 4)
+            for model_name in data.keys():
+                if model_name in gan_group2:
+                    x = data[model_name][gan_smooth]['precision']
+                    y = data[model_name][gan_smooth]['recall']
+                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+            plt.legend()
+            if limit_axis:
+                plt.xlim(xlim)
+                plt.ylim(ylim)
+            plt.ylabel('disentangling recall')
+            
+            plt.subplots_adjust(hspace=0.5)
+            plt.show()
+    
+    
+    
+    if evaluate:
+        max_ind = 10000
         
-        for model, ld in yumi_vae_models.items():
-            print('VAE model with ld: ', model, ld)
-            vae_eval_np = get_vae_samples('vae1', 2, n_points)
-
-            print('Starting to calculate InfoGAN PR....')
-            sess = tf.Session()
-            with sess.as_default():     
-                res_vae = iprd.knn_precision_recall_features(
+        for n_points in [750, 1000, 5000, 7500]:
+            print('Chosen n_points: ', n_points)
+            base = np.random.choice(max_ind, n_points, replace=False)
+            ref_np = get_ref_samples(base)
+            
+            final_dict = {}
+            for model, ld in yumi_gan_models.items():
+                print('InfoGAN model with ld: ', model, ld)
+                infogan_eval_np = get_infogan_samples(model, ld, n_points)
+                
+                infogan_eval_np_avg20 = moving_average(infogan_eval_np, n=20)
+                infogan_eval_np_avg15 = moving_average(infogan_eval_np, n=15)
+                infogan_eval_np_avg10 = moving_average(infogan_eval_np, n=10)
+                infogan_eval_np_avg5 = moving_average(infogan_eval_np, n=5)
+                
+                print('Starting to calculate InfoGAN PR....')
+                sess = tf.Session()
+                with sess.as_default():
+                    res_gan = iprd.knn_precision_recall_features(
                                 ref_np.reshape(-1, 7*79), 
-                                vae_eval_np.reshape(-1, 7*79), nhood_sizes=[3],
+                                infogan_eval_np.reshape(-1, 7*79), nhood_sizes=[3],
                                 row_batch_size=500, col_batch_size=100, num_gpus=1)
-        
-            final_dict[model] = {'res_vae': res_vae}
+                    
+                    res_gan5 = iprd.knn_precision_recall_features(
+                                ref_np.reshape(-1, 7*79), 
+                                infogan_eval_np_avg5.reshape(-1, 7*79), nhood_sizes=[3],
+                                row_batch_size=500, col_batch_size=100, num_gpus=1)
+                    
+                    res_gan10 = iprd.knn_precision_recall_features(
+                                ref_np.reshape(-1, 7*79), 
+                                infogan_eval_np_avg10.reshape(-1, 7*79), nhood_sizes=[3],
+                                row_batch_size=500, col_batch_size=100, num_gpus=1)
+                    
+                    res_gan15 = iprd.knn_precision_recall_features(
+                                ref_np.reshape(-1, 7*79), 
+                                infogan_eval_np_avg15.reshape(-1, 7*79), nhood_sizes=[3],
+                                row_batch_size=500, col_batch_size=100, num_gpus=1)
+                    
+                    res_gan20 = iprd.knn_precision_recall_features(
+                                ref_np.reshape(-1, 7*79), 
+                                infogan_eval_np_avg20.reshape(-1, 7*79), nhood_sizes=[3],
+                                row_batch_size=500, col_batch_size=100, num_gpus=1)
+                    
+                    res5_gan15 = iprd.knn_precision_recall_features(
+                                ref_np.reshape(-1, 7*79), 
+                                infogan_eval_np_avg15.reshape(-1, 7*79), nhood_sizes=[5],
+                                row_batch_size=500, col_batch_size=100, num_gpus=1)
+                    
+                    res5_gan20 = iprd.knn_precision_recall_features(
+                                ref_np.reshape(-1, 7*79), 
+                                infogan_eval_np_avg20.reshape(-1, 7*79), nhood_sizes=[5],
+                                row_batch_size=500, col_batch_size=100, num_gpus=1)
+                    
+                final_dict[model] = {
+                        'res_gan': res_gan,
+                        'res_gan5': res_gan5,
+                        'res_gan10': res_gan10,
+                        'res_gan15': res_gan15,
+                        'res_gan20': res_gan20,
+                        'res5_gan15': res5_gan15,
+                        'res5_gan20': res5_gan20,
+                        }
+                    
             
-        print('Results ready ', final_dict)
-        with open('test_pr/ipr_results_{0}samples.pkl'.format(n_points), 'wb') as f:
-            pickle.dump(final_dict, f)
+            for model, ld in yumi_vae_models.items():
+                print('VAE model with ld: ', model, ld)
+                vae_eval_np = get_vae_samples('vae1', 2, n_points)
+    
+                print('Starting to calculate InfoGAN PR....')
+                sess = tf.Session()
+                with sess.as_default():     
+                    res_vae = iprd.knn_precision_recall_features(
+                                    ref_np.reshape(-1, 7*79), 
+                                    vae_eval_np.reshape(-1, 7*79), nhood_sizes=[3],
+                                    row_batch_size=500, col_batch_size=100, num_gpus=1)
+            
+                final_dict[model] = {'res_vae': res_vae}
+                
+            print('Results ready ', final_dict)
+            with open('test_pr/ipr_results_{0}samples.pkl'.format(n_points), 'wb') as f:
+                pickle.dump(final_dict, f)

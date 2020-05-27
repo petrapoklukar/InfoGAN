@@ -124,6 +124,7 @@ def _cluster_into_bins(eval_data, ref_data, num_clusters):
 
   cluster_data = np.vstack([eval_data, ref_data])
   kmeans = sklearn.cluster.MiniBatchKMeans(n_clusters=num_clusters, n_init=10)
+  # kmeans = sklearn.cluster.KMeans(n_clusters=num_clusters, n_init=10)
   labels = kmeans.fit(cluster_data).labels_
 
   eval_labels = labels[:len(eval_data)]

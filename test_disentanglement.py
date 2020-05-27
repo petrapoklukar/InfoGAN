@@ -16,6 +16,7 @@ import pickle
 from scipy import stats
 import heapq
 import csv
+import os
 from datetime import datetime
 
 class FullyConnecteDecoder(nn.Module):
@@ -102,19 +103,25 @@ def sample_latent_codes(ld, n_samples, dgm_type, ntype='equidistant', device='cp
     return latent_codes_dict
 
 
-def load_simulation_state_dict(file_name, fignum=1, plot=True):
+def load_simulation_state_dict(filename, fignum=1, plot=True):
     """
     path_to_data: e.g. 'dataset/simulation_states/gan2/'
     """
-    path_to_data = 'dataset/simulation_states/{0}.pkl'.format(file_name)
+    path_to_data = 'dataset/simulation_states/{0}.pkl'.format(filename)
     with open(path_to_data, 'rb') as f:
         states_dict = pickle.load(f)
+    
+    plot_dir = 'disentanglement_test/{}'.format(filename)
+    if not os.path.isdir(plot_dir):
+        os.makedirs(plot_dir)
+   
     
     # ld = states_dict['0'].shape[1]
     state_list = [0, 1, -1]
     state_names = ['x', 'y', 'theta']
     keys_list = list(states_dict.keys())
-    keys_list.remove('info')
+    keys_list.remove('n_repeats')
+    keys_list.remove('n_equidistant_pnts')
     if plot:
         for fixed_fac in keys_list:
             plt.figure(fixed_fac, figsize=(10, 10))
@@ -127,7 +134,9 @@ def load_simulation_state_dict(file_name, fignum=1, plot=True):
                 plt.legend()
                 plt.title(state_names[i])
             plt.subplots_adjust(hspace=0.5)
-            plt.show()
+            plt.savefig(plot_dir + '/{0}_dim{1}'.format(filename, fixed_fac))
+            plt.close(fixed_fac)
+            plt.close('all')
     return states_dict
         
         
@@ -349,16 +358,379 @@ def select_top3_factors(res_dict):
     
 
 if __name__ == '__main__':
-    model_names = ['data_all_models/gan{0}'.format(str(i)) for i in range(1, 10)] + \
-    ['data_all_models/vae{0}'.format(str(i)) for i in range(1, 10)]
+    model_names = ['gan{0}'.format(str(i)) for i in range(1, 10)] + \
+        ['vae{0}'.format(str(i)) for i in range(1, 10)]
    
     gt_data = np.load('dataset/simulation_states/yumi_states.npy')
     gts_data = gt_data[:, (0, 1, -1)]
     
+                
+    if False:
+        end_results = {}        
+        now = str(datetime.timestamp(datetime.now()))
+        results_filename = 'disentanglement_test/disentanglement_scores_MMDalpha10_{0}.csv'.format(now)
+        with open(results_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',')
+            for i in range(len(model_names)):
+                model_name = model_names[i]#.split('.')[0].split('/')[-1]
+                print(model_name)
+                
+                end_results[model_name] = {}
+                
+                model_data = load_simulation_state_dict(model_names[i], plot=True)
+                # indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
+                # n_inter = model_data['info'][indices[0]][1]
+                # n_inter_samples = int(model_data['info'][indices[1]][1])
+                # del model_data['info']
+                n_inter_samples = int(model_data['n_repeats'])
+                n_inter = int(model_data['n_equidistant_pnts'])
+                del model_data['n_repeats']
+                del model_data['n_equidistant_pnts']
+                alpha_list = [10, 10, 10]
+                
+                mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(
+                    model_data, gts_data, n_sub_samples=200, p_value=0.001, 
+                    n_inter=n_inter, n_inter_samples=n_inter_samples, 
+                    alpha_list=alpha_list)
+                dp_mmd, dr_mmd, t3_mmd = select_top3_factors(mmdd_temp)
+                end_results[model_name]['mmd'] = (dp_mmd, dr_mmd)
+                t3_mmd = sorted(t3_mmd, key=lambda x: x[0])
+                print(' *- MMD', t3_mmd)
+                
+                d, d_temp, _ = compute_ks_test(
+                    model_data, gts_data, n_sub_samples=500, p_value=0.001, 
+                    n_inter=n_inter, n_inter_samples=n_inter_samples, 
+                    n_resampling=4)
+                dp_ks, dr_ks, t3_ks = select_top3_factors(d_temp)
+                end_results[model_name]['ks'] = (dp_ks, dr_ks)
+                t3_ks = sorted(t3_ks, key=lambda x: x[0])
+                print(' *- KS', t3_ks)
+                
+                writer.writerow([
+                    model_name, 
+                    'MMD', dp_mmd, dr_mmd, t3_mmd, 200,  0.001, n_inter, n_inter_samples, alpha_list,
+                    'KS', dp_mmd, dr_mmd, t3_mmd, 500, 0.001, n_inter, n_inter_samples, 4])
+                
+                with open('disentanglement_test/INTER_disentanglement_scores_MMDalpha10_dict.pkl', 'wb') as f:
+                    pickle.dump(end_results, f)
+        
+        with open('disentanglement_test/disentanglement_scores_MMDalpha10_dict.pkl', 'wb') as f:
+            pickle.dump(end_results, f)
+     
+        
+    if False:
+        with open('disentanglement_test/VAE_disentanglement_scores_MMDalpha10_dict.pkl', 'rb') as f:
+            vae_data = pickle.load(f)
+            
+        with open('disentanglement_test/GAN_disentanglement_scores_MMDalpha10_dict.pkl', 'rb') as f:
+            gan_data = pickle.load(f)
+        
+        # plot the results
+        vae_group1 = ['vae' + str(i) for i in range(1, 6)]
+        vae_group2 = ['vae' + str(i) for i in range(6, 10)]
+        gan_group1 = ['gan' + str(i) for i in range(1, 6)]
+        gan_group2 = ['gan' + str(i) for i in range(6, 10)]
+        
+        # ------------- Plot MMD results
+        plt.figure(11)
+        plt.clf()
+        plt.suptitle('MMD Disentanglement scores')
+
+        metric = 'mmd'
+        xlim = (0.3, 0.9)
+        plt.subplot(2, 2, 1)
+        for model_name in vae_data.keys():
+            if model_name in vae_group1:
+                x, y = vae_data[model_name][metric]
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.ylabel('disentangling recall')
+        plt.xlim(xlim)
+        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
+        
+        plt.subplot(2, 2, 2)
+        for model_name in vae_data.keys():
+            if model_name in vae_group2:
+                x, y = vae_data[model_name][metric]
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
+        plt.legend()
+        plt.xlim(xlim)
+        
+        plt.subplot(2, 2, 3)
+        for model_name in gan_data.keys():
+            if model_name in gan_group1:
+                x, y = gan_data[model_name][metric]
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.xlim(xlim)
+        plt.xlabel('disentangling precision')
+        plt.ylabel('disentangling recall')
+        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
+        
+        plt.subplot(2, 2, 4)
+        for model_name in gan_data.keys():
+            if model_name in gan_group2:
+                x, y = gan_data[model_name][metric]
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.xlim(xlim)
+        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
+        plt.ylabel('disentangling recall')
+        plt.subplots_adjust(hspace=0.5)
+        plt.show()
+        
+        
+        # ------------- Plot MMD Agg 
+        fig2 = plt.figure(9, constrained_layout=True, figsize=(5, 5))
+        plt.clf()
+        gs = fig2.add_gridspec(2, 2)#, width_ratios=[1, 2])
+        xlim = (0, 1.8)
+        fig2.suptitle('MMD Aggregated Disentanglement scores') #fontsize=16)
+        
+        vae_agg_results_g1 = []
+        vae_agg_results_g2 = []
+        for model_name in vae_data.keys():
+            x, y = vae_data[model_name]['mmd']
+            if model_name in vae_group1:
+                vae_agg_results_g1.append((model_name, x+y))
+            else:
+                vae_agg_results_g2.append((model_name, x+y))
+        
+        vae_agg_results_g1 = sorted(vae_agg_results_g1, key=lambda x: x[1], reverse=True)
+        vae_agg_results_g2 = sorted(vae_agg_results_g2, key=lambda x: x[1], reverse=True)
+        vae_agg_g1_names, vae_agg_g1_res = zip(*vae_agg_results_g1)
+        vae_agg_g2_names, vae_agg_g2_res = zip(*vae_agg_results_g2)
+        
+        gan_agg_results_g1 = []
+        gan_agg_results_g2 = []
+        for model_name in gan_data.keys():
+            x, y = gan_data[model_name]['mmd']
+            if model_name in gan_group1:
+                gan_agg_results_g1.append((model_name, x+y))
+            else:
+                gan_agg_results_g2.append((model_name, x+y))
+        
+        gan_agg_results_g1 = sorted(gan_agg_results_g1, key=lambda x: x[1], reverse=True)
+        gan_agg_results_g2 = sorted(gan_agg_results_g2, key=lambda x: x[1], reverse=True)
+        gan_agg_g1_names, gan_agg_g1_res = zip(*gan_agg_results_g1)
+        gan_agg_g2_names, gan_agg_g2_res = zip(*gan_agg_results_g2)
+
+        f2_ax1 = fig2.add_subplot(gs[0, 0])
+        f2_ax1.set_yticks(np.arange(len(vae_agg_g1_names)) + 1)
+        f2_ax1.set_yticklabels(vae_agg_g1_names[::-1])
+        f2_ax1.set_xlim(xlim)
+        
+        f2_ax2 = fig2.add_subplot(gs[0, 1])
+        f2_ax2.set_yticks(np.arange(len(vae_agg_g2_names)) + 1)
+        f2_ax2.set_yticklabels(vae_agg_g2_names[::-1])
+        f2_ax2.set_xlim(xlim)
+ 
+        f2_ax3 = fig2.add_subplot(gs[1, 0])
+        f2_ax3.set_yticks(np.arange(len(gan_agg_g1_names)) + 1)
+        f2_ax3.set_yticklabels(gan_agg_g1_names[::-1])
+        f2_ax3.set_xlim(xlim)
+        
+        f2_ax4 = fig2.add_subplot(gs[1, 1])
+        f2_ax4.set_yticks(np.arange(len(gan_agg_g2_names)) + 1)
+        f2_ax4.set_yticklabels(gan_agg_g2_names[::-1])
+        f2_ax4.set_xlim(xlim)
+        
+        for model_name in vae_data.keys():
+            x, y = vae_data[model_name]['mmd']
+            if model_name in vae_group1:
+                agg_names = vae_agg_g1_names
+                agg_res = vae_agg_g1_res
+                ax = f2_ax1
+            else:
+                agg_names = vae_agg_g2_names
+                agg_res = vae_agg_g2_res
+                ax = f2_ax2
+            
+            i = len(agg_names) - agg_names.index(model_name)
+            res = agg_res[agg_names.index(model_name)]
+            
+            ax.barh(i, res, align='center', label=model_name, 
+                        height=0.5)
+            ax.legend()
+                
+        for model_name in gan_data.keys():
+            x, y = gan_data[model_name]['mmd']
+            if model_name in gan_group1:
+                agg_names = gan_agg_g1_names
+                agg_res = gan_agg_g1_res
+                ax = f2_ax3
+            else:
+                agg_names = gan_agg_g2_names
+                agg_res = gan_agg_g2_res
+                ax = f2_ax4
+                
+            i = len(agg_names) - agg_names.index(model_name)
+            res = agg_res[agg_names.index(model_name)]
+            
+            ax.barh(i, res, align='center', label=model_name, 
+                        height=0.5)
+            ax.legend()
+        # plt.subplots_adjust(hspace=0.5)
+        plt.show()
+                
+
+        
+        
+        # ------------- Plot KS results
+        plt.figure(12)
+        plt.clf()
+        plt.suptitle('MMD Disentanglement scores')
+        
+        metric = 'ks'
+        xlim = (0.7, 1.7)
+        ylim = (0.6, 1.05)
+        plt.subplot(2, 2, 1)
+        for model_name in vae_data.keys():
+            if model_name in vae_group1:
+                x, y = vae_data[model_name][metric]
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.xlim(xlim)
+        plt.ylim(ylim)
+        plt.ylabel('disentangling recall')
+        
+        plt.subplot(2, 2, 2)
+        for model_name in vae_data.keys():
+            if model_name in vae_group2:
+                x, y = vae_data[model_name][metric]
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.xlim(xlim)
+        plt.ylim(ylim)
+        
+        plt.subplot(2, 2, 3)
+        for model_name in gan_data.keys():
+            if model_name in gan_group1:
+                x, y = gan_data[model_name][metric]
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.xlim(xlim)
+        plt.ylim(ylim)
+        plt.xlabel('disentangling precision')
+        plt.ylabel('disentangling recall')
+        
+        plt.subplot(2, 2, 4)
+        for model_name in gan_data.keys():
+            if model_name in gan_group2:
+                x, y = gan_data[model_name][metric]
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+        plt.legend()
+        plt.xlim(xlim)
+        plt.ylim(ylim)
+        plt.ylabel('disentangling recall')
+        
+        plt.subplots_adjust(hspace=0.5)
+        plt.show()
+        
+        
+        # ------------- Plot Agg KS
+        fig2 = plt.figure(13, constrained_layout=True, figsize=(5, 5))
+        plt.clf()
+        gs = fig2.add_gridspec(2, 2)#, width_ratios=[1, 2])
+        xlim = (0, 3)
+        fig2.suptitle('KS Aggregated Disentanglement scores') #fontsize=16)
+        
+        vae_agg_results_g1 = []
+        vae_agg_results_g2 = []
+        for model_name in vae_data.keys():
+            x, y = vae_data[model_name]['ks']
+            if model_name in vae_group1:
+                vae_agg_results_g1.append((model_name, x+y))
+            else:
+                vae_agg_results_g2.append((model_name, x+y))
+        
+        vae_agg_results_g1 = sorted(vae_agg_results_g1, key=lambda x: x[1], reverse=True)
+        vae_agg_results_g2 = sorted(vae_agg_results_g2, key=lambda x: x[1], reverse=True)
+        vae_agg_g1_names, vae_agg_g1_res = zip(*vae_agg_results_g1)
+        vae_agg_g2_names, vae_agg_g2_res = zip(*vae_agg_results_g2)
+        
+        gan_agg_results_g1 = []
+        gan_agg_results_g2 = []
+        for model_name in gan_data.keys():
+            x, y = gan_data[model_name]['ks']
+            if model_name in gan_group1:
+                gan_agg_results_g1.append((model_name, x+y))
+            else:
+                gan_agg_results_g2.append((model_name, x+y))
+        
+        gan_agg_results_g1 = sorted(gan_agg_results_g1, key=lambda x: x[1], reverse=True)
+        gan_agg_results_g2 = sorted(gan_agg_results_g2, key=lambda x: x[1], reverse=True)
+        gan_agg_g1_names, gan_agg_g1_res = zip(*gan_agg_results_g1)
+        gan_agg_g2_names, gan_agg_g2_res = zip(*gan_agg_results_g2)
+
+        f2_ax1 = fig2.add_subplot(gs[0, 0])
+        f2_ax1.set_yticks(np.arange(len(vae_agg_g1_names)) + 1)
+        f2_ax1.set_yticklabels(vae_agg_g1_names[::-1])
+        f2_ax1.set_xlim(xlim)
+        
+        f2_ax2 = fig2.add_subplot(gs[0, 1])
+        f2_ax2.set_yticks(np.arange(len(vae_agg_g2_names)) + 1)
+        f2_ax2.set_yticklabels(vae_agg_g2_names[::-1])
+        f2_ax2.set_xlim(xlim)
+ 
+        f2_ax3 = fig2.add_subplot(gs[1, 0])
+        f2_ax3.set_yticks(np.arange(len(gan_agg_g1_names)) + 1)
+        f2_ax3.set_yticklabels(gan_agg_g1_names[::-1])
+        f2_ax3.set_xlim(xlim)
+        
+        f2_ax4 = fig2.add_subplot(gs[1, 1])
+        f2_ax4.set_yticks(np.arange(len(gan_agg_g2_names)) + 1)
+        f2_ax4.set_yticklabels(gan_agg_g2_names[::-1])
+        f2_ax4.set_xlim(xlim)
+        
+        
+        for model_name in vae_data.keys():
+            x, y = vae_data[model_name]['ks']
+            if model_name in vae_group1:
+                agg_names = vae_agg_g1_names
+                agg_res = vae_agg_g1_res
+                ax = f2_ax1
+            else:
+                agg_names = vae_agg_g2_names
+                agg_res = vae_agg_g2_res
+                ax = f2_ax2
+            
+            i = len(agg_names) - agg_names.index(model_name)
+            res = agg_res[agg_names.index(model_name)]
+            
+            ax.barh(i, res, align='center', label=model_name, 
+                        height=0.5)
+            ax.legend(loc='lower right')
+            
+            
+        for model_name in gan_data.keys():
+            x, y = gan_data[model_name]['ks']
+            if model_name in gan_group1:
+                agg_names = gan_agg_g1_names
+                agg_res = gan_agg_g1_res
+                ax = f2_ax3
+            else:
+                agg_names = gan_agg_g2_names
+                agg_res = gan_agg_g2_res
+                ax = f2_ax4
+                
+            i = len(agg_names) - agg_names.index(model_name)
+            res = agg_res[agg_names.index(model_name)]
+            
+            ax.barh(i, res, align='center', label=model_name, 
+                        height=0.5)
+            ax.legend(loc='lower right')
+        # plt.subplots_adjust(hspace=0.5)
+        plt.show()
+        
+        
+    
+# -----
     if False:
         end_results2 = {}        
         now = str(datetime.timestamp(datetime.now()))
-        results_filename = 'results/MMDalpha5_disentanglement_scores_{0}.csv'.format(now)
+        results_filename = 'disentanglement_test/MMDalpha5_disentanglement_scores_{0}.csv'.format(now)
         with open(results_filename, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
             for i in range(len(model_names)):
@@ -367,23 +739,28 @@ if __name__ == '__main__':
                 
                 end_results2[model_name] = {}
                 
-                model_data = load_simulation_state_dict(model_names[i], plot=False)
-                indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
-                n_inter = model_data['info'][indices[0]][1]
-                n_inter_samples = int(model_data['info'][indices[1]][1])
-                del model_data['info']
-                mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(model_data, gts_data, n_sub_samples=200, 
-                                                p_value=0.001, n_inter=n_inter,
-                                                n_inter_samples=n_inter_samples, 
-                                                alpha_list = [5, 5, 5])
+                model_data = load_simulation_state_dict(model_names[i], plot=True)
+                # indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
+                # n_inter = model_data['info'][indices[0]][1]
+                # n_inter_samples = int(model_data['info'][indices[1]][1])
+                
+                n_inter = model_data['n_repeats']
+                n_inter_samples = model_data['n_equidistant_pnts']
+                del model_data['n_repeats']
+                del model_data['n_equidistant_pnts']
+                mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(
+                    model_data, gts_data, n_sub_samples=200, p_value=0.001, 
+                    n_inter=n_inter, n_inter_samples=n_inter_samples, 
+                    alpha_list = [5, 5, 5])
                 dp_mmd, dr_mmd, t3_mmd = select_top3_factors(mmdd_temp)
                 end_results2[model_name]['mmd'] = (dp_mmd, dr_mmd)
                 t3_mmd = sorted(t3_mmd, key=lambda x: x[0])
                 print(' *- MMD', t3_mmd)
-                with open('results/MMDalpha5_INTERdisentanglement_scores_{0}.pkl'.format(now), 'wb') as f:
+                with open('disentanglement_test/MMDalpha5_INTERdisentanglement_scores_{0}.pkl'.format(now), 'wb') as f:
                     pickle.dump(end_results2, f) 
-         
-        with open('results/MMDalpha5_disentanglement_scores_{0}.pkl'.format(now), 'wb') as f:
+    
+    if False:
+        with open('disentanglement_test/MMDalpha5_disentanglement_scores_{0}.pkl'.format(now), 'wb') as f:
             pickle.dump(end_results2, f)      
 
         base_colors = ['black', 'b', 'r',  'g', 'c', 'm']
@@ -554,171 +931,5 @@ if __name__ == '__main__':
         ax1_labels, ax1_handles = zip(*sorted(zip(ax1_labels, ax1_handles), key=lambda t: t[0]))
         f3_ax1.legend(ax1_handles, ax1_labels)
         plt.subplots_adjust(hspace=0.2, wspace=0.5)
-
-        
-            
-        
-                
-    if False:
-        end_results = {}        
-        now = str(datetime.timestamp(datetime.now()))
-        results_filename = 'results/disentanglement_scores_{0}.csv'.format(now)
-        with open(results_filename, 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile, delimiter=',')
-            for i in range(len(model_names)):
-                model_name = model_names[i].split('.')[0].split('/')[-1]
-                print(model_name)
-                
-                end_results[model_name] = {}
-                
-                model_data = load_simulation_state_dict(model_names[i], plot=False)
-                indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
-                n_inter = model_data['info'][indices[0]][1]
-                n_inter_samples = int(model_data['info'][indices[1]][1])
-                del model_data['info']
-                mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(model_data, gts_data, n_sub_samples=200, 
-                                                p_value=0.001, n_inter=n_inter,
-                                                n_inter_samples=n_inter_samples)
-                dp_mmd, dr_mmd, t3_mmd = select_top3_factors(mmdd_temp)
-                end_results[model_name]['mmd'] = (dp_mmd, dr_mmd)
-                t3_mmd = sorted(t3_mmd, key=lambda x: x[0])
-                print(' *- MMD', t3_mmd)
-                
-                d, d_temp, _ = compute_ks_test(model_data, gts_data, n_sub_samples=500, 
-                                               p_value=0.001, n_inter=n_inter,
-                                                n_inter_samples=n_inter_samples, n_resampling=4)
-                dp_ks, dr_ks, t3_ks = select_top3_factors(d_temp)
-                end_results[model_name]['ks'] = (dp_ks, dr_ks)
-                t3_ks = sorted(t3_ks, key=lambda x: x[0])
-                print(' *- KS', t3_ks)
-                
-                writer.writerow([model_name, 'MMD', dp_mmd, dr_mmd, t3_mmd, 'KS', dp_mmd, dr_mmd, t3_mmd])
-            
-        
-        with open('results/disentanglement_scores_dict.pkl', 'wb') as f:
-            pickle.dump(end_results, f)
-     
-        # plot the results
-        model_group1 = ['vae' + str(i) for i in range(1, 7)]
-        model_group2 = ['vae' + str(i) for i in range(7, 10)] + ['gan' + str(i) for i in range(1, 4)]
-        
-        plt.figure(11)
-        plt.clf()
-
-        plt.subplot(2, 2, 1)
-        for model in end_results.keys():
-            model_name = model.split('_')[1]
-            if model_name in model_group1:
-                x, y = end_results[model]['mmd']
-                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend()
-        plt.title('MMD Disentanglement scores')
-        plt.xlabel('disentangling precision')
-        plt.ylabel('disentangling recall')
-        plt.ylim((0.28, 1.02))
-        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
-        
-        plt.subplot(2, 2, 2)
-        for model in end_results.keys():
-            model_name = model.split('_')[1]
-            if model_name in model_group1:
-                x, y = 1, np.sum(end_results[model]['mmd'])
-                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-        plt.title('MMD Aggregated disentanglement scores')  
-        plt.xlim((1-0.005, 1.005))
-        plt.xticks(ticks=[1.0], labels=[''])
-        plt.ylim((1.1, 1.8))
-        plt.legend()
-        
-        plt.subplot(2, 2, 3)
-        for model in end_results.keys():
-            model_name = model.split('_')[1]
-            if model_name in model_group2:
-                x, y = end_results[model]['mmd']
-                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend()
-        
-        plt.xlabel('disentangling precision')
-        plt.ylabel('disentangling recall')
-        plt.ylim((0.28, 1.02))
-        plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
-        
-        plt.subplot(2, 2, 4)
-        for model in end_results.keys():
-            model_name = model.split('_')[1]
-            if model_name in model_group2:
-                x, y = 1, np.sum(end_results[model]['mmd'])
-                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend()
-        plt.xlim((1-0.005, 1.005))
-        plt.xticks(ticks=[1.0], labels=[''])
-        plt.ylim((1.1, 1.8))
-        plt.subplots_adjust(hspace=0.5)
-        plt.show()
-        
-        
-        
-        
-        fig3 = plt.figure(constrained_layout=True, figsize=(5,5))
-        gs = fig3.add_gridspec(2, 3)
-        
-        f3_ax1 = fig3.add_subplot(gs[0, 0])
-        f3_ax1.set_xlim((1-0.005, 1.005))
-        f3_ax1.set_xticks([1.0-0.002])
-        f3_ax1.set_xticklabels([])
-        f3_ax1.tick_params(axis='x', length=0)
-        f3_ax1.set_ylim((0.6, 1.6))
-        f3_ax1.set_title('MMD Aggregated\ndisentanglement scores')
-        
-        f3_ax2 = fig3.add_subplot(gs[0, 1:])
-        f3_ax2.set_ylim((0.28, 1.02))
-        f3_ax2.set_yticks([0.333, 0.666, 1.0])
-        f3_ax2.set_yticklabels(['1/3', '2/3', '3/3'])
-        f3_ax2.set_ylabel('disentangling recall')
-        f3_ax2.set_xlim((0.375, 0.55))
-        f3_ax2.set_title('MMD disentanglement scores')
-        
-        f3_ax3 = fig3.add_subplot(gs[1, 0])
-        f3_ax3.set_xlim((1-0.005, 1.005))
-        f3_ax3.set_xticks([1.0-0.002])
-        f3_ax3.set_xticklabels([])
-        f3_ax3.tick_params(axis='x', length=0)
-        f3_ax3.set_ylim((0.6, 1.6))
-        
-        f3_ax4 = fig3.add_subplot(gs[1, 1:])
-        f3_ax4.set_ylim((0.28, 1.02))
-        f3_ax4.set_yticks([0.333, 0.666, 1.0])
-        f3_ax4.set_yticklabels(['1/3', '2/3', '3/3'])
-        f3_ax4.set_ylabel('disentangling recall')
-        f3_ax4.set_xlim((0.375, 0.55))
-        f3_ax4.set_xlabel('disentangling precision')
-        plt.subplots_adjust(hspace=0.2, wspace=0.5)
-        
-        for model in end_results.keys():
-            model_name = model.split('_')[1]
-            x, y = end_results[model]['mmd']
-            if model_name in model_group1:
-                f3_ax1.scatter(1.0-0.002, x+y, alpha=0.7, label=model_name, marker='D')
-                f3_ax1.legend()
-                f3_ax2.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-            else:
-                f3_ax3.scatter(1.0-0.002, x+y, alpha=0.7, label=model_name, marker='D')
-                f3_ax3.legend()
-                f3_ax4.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-            
-        ax1_handles, ax1_labels = f3_ax1.get_legend_handles_labels()
-        ax1_labels, ax1_handles = zip(*sorted(zip(ax1_labels, ax1_handles), key=lambda t: t[0]))
-        f3_ax1.legend(ax1_handles, ax1_labels)
-
-        ax3_handles, ax3_labels = f3_ax3.get_legend_handles_labels()
-        ax3_labels, ax3_handles = zip(*sorted(zip(ax3_labels, ax3_handles), key=lambda t: t[0]))
-        ax3_labels_new = ax3_labels[3:] + ax3_labels[:3]
-        ax3_handles_new = ax3_handles[3:] + ax3_handles[:3]
-        f3_ax3.legend(ax3_handles_new, ax3_labels_new)
-        
-        
-    
-    
-            
-            
+           
             
