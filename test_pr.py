@@ -18,7 +18,8 @@ from itertools import groupby
 import InfoGAN_yumi as infogan
 import InfoGAN_models as models
 import matplotlib
-matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
+#matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
+matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 import pickle
 import iprd_score as iprd 
