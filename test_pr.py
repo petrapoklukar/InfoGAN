@@ -428,6 +428,11 @@ if __name__ == '__main__':
                                 ref_np.reshape(-1, 7*79), 
                                 infogan_eval_np_avg10.reshape(-1, 7*79), nhood_sizes=[20],
                                 row_batch_size=500, col_batch_size=100, num_gpus=1)
+
+                    res20_gan15 = iprd.knn_precision_recall_features(
+                                ref_np.reshape(-1, 7*79), 
+                                infogan_eval_np_avg15.reshape(-1, 7*79), nhood_sizes=[20],
+                                row_batch_size=500, col_batch_size=100, num_gpus=1)
                     
                     res15 = iprd.knn_precision_recall_features(
                                 ref_np.reshape(-1, 7*79), 
