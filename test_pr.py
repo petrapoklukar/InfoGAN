@@ -167,8 +167,8 @@ if __name__ == '__main__':
     analyse = False
     
     if analyse:
-        n_samples = 7500
-        with open('test_pr/ipr_results_{0}samples.pkl'.format(n_samples), 'rb') as f:
+        n_samples = 1000
+        with open('test_pr/ipr_results_nhood_{0}samples.pkl'.format(n_samples), 'rb') as f:
             data_o = pickle.load(f)
         
         data = {}    
@@ -203,6 +203,124 @@ if __name__ == '__main__':
         green = ['#c3eec3', '#73d873', '#2ca02c', '#113c11']
         red = ['#f3bebf', '#e36869', '#d62728', '#6c1414']
         purple = ['#d9cae8', '#a783c9', '#7545a0', '#412759']
+                  
+        
+        def plot_gan_vae_ipr(nhoods, smooth):
+#            nhoods = ['5']#['', '5', '12', '20']
+#            smooth = ['0', '10']
+            
+            plt.figure(12)
+            plt.clf()
+            plt.suptitle('Improved PR scores')
+            for nhood in nhoods:
+                for s in smooth:
+                    
+                    vae_res = 'res{0}_vae'.format(nhood)
+                    gan_res = 'res{0}_gan{1}'.format(nhood, s)
+                    label = 'nhood{0}_s{1}'.format(nhood, s)
+
+                    prec_list = list(map(lambda k: 
+                        data[k][vae_res]['precision'] if 'vae' in k else \
+                        data[k][gan_res]['precision'], data.keys()))
+                    rec_list = list(map(lambda k: 
+                        data[k][vae_res]['recall'] if 'vae' in k else \
+                        data[k][gan_res]['recall'], data.keys()))    
+            
+                    prec_min = np.round(min(prec_list) - 0.5 * 10**(-2), 2)
+                    prec_max = np.round(max(prec_list) + 0.5 * 10**(-2), 2)
+                    rec_min = np.round(min(rec_list) - 0.5 * 10**(-2), 2)
+                    rec_max = np.round(max(rec_list) + 0.5 * 10**(-2), 2)
+                    
+                    # ------------- Plot IPR results
+        #            gan_smooth = 'res_gan20'
+                    xlim = (prec_min, prec_max)
+                    ylim = (rec_min, rec_max)
+                    limit_axis = False
+                    plt.subplot(2, 2, 1)
+                    for model_name in data.keys():
+                        if model_name in vae_group1:
+                            x = data[model_name][vae_res]['precision']
+                            y = data[model_name][vae_res]['recall']
+                            plt.scatter(x, y, alpha=0.7, label=label, marker='D')
+#                    if show_legend:
+                    plt.legend()
+                    if limit_axis:
+                        plt.xlim(xlim)
+                        plt.ylim(ylim)
+                    plt.ylabel('recall')
+                    
+                    plt.subplot(2, 2, 2)
+                    for model_name in data.keys():
+                        if model_name in vae_group2:
+                            x = data[model_name][vae_res]['precision']
+                            y = data[model_name][vae_res]['recall']
+                            plt.scatter(x, y, alpha=0.7, label=label, marker='D')
+#                    if show_legend:
+                    plt.legend()
+                    if limit_axis:
+                        plt.xlim(xlim)
+                        plt.ylim(ylim)
+                    
+                    plt.subplot(2, 2, 3)
+                    for model_name in data.keys():
+                        if model_name in gan_group1:
+                            x = data[model_name][gan_res]['precision']
+                            y = data[model_name][gan_res]['recall']
+                            plt.scatter(x, y, alpha=0.7, label=label, marker='D')
+#                    if show_legend:
+                    plt.legend()
+                    if limit_axis:
+                        plt.xlim(xlim)
+                        plt.ylim(ylim)
+                    plt.xlabel('precision')
+                    plt.ylabel('recall')
+                    
+                    plt.subplot(2, 2, 4)
+                    for model_name in data.keys():
+                        if model_name in gan_group2:
+                            x = data[model_name][gan_res]['precision']
+                            y = data[model_name][gan_res]['recall']
+                            plt.scatter(x, y, alpha=0.7, label=label, marker='D')
+#                    if show_legend:
+                    plt.legend()
+                    if limit_axis:
+                        plt.xlim(xlim)
+                        plt.ylim(ylim)
+                    plt.ylabel('recall')
+                    
+#            plt.legend()
+            plt.subplots_adjust(hspace=0.5)
+#                    plt.savefig('test_pr/pr_{0}samples_{1}'.format(n_samples, gan_smooth))
+            plt.show()
+        
+                          
+        
+    
+        def plot_res15_ipr(model='gan'):
+            key = lambda model: 'res15' if 'gan' in model  else 'res'
+            fig = plt.figure(1)
+            plt.clf()
+            gan_models = [k for k in data.keys() if 'gan' in k ]
+            vae_models = [k for k in data.keys() if 'vae' in k ]
+            nhoods = [5, 10]#, 25, 50]
+            model_groups = [vae_group1, vae_group2, gan_group1, gan_group2]
+            for i in range(4):
+                ax = fig.add_subplot(2, 2, i+1)
+#                plt.title(gan_models[i])
+                for model in model_groups[i]:
+                    print(model, key(model))
+                    gan_dict = data[model][key(model)]
+#                    vae_dict = data[model]['res']
+                    for nhood in range(len(nhoods)):
+                        ax.scatter(gan_dict['precision'][nhood], 
+                                   gan_dict['recall'][nhood], 
+                                   label='g'+str(nhoods[nhood]))
+                        plt.legend()
+#                        ax.scatter(vae_dict['precision'][nhood], 
+#                                   vae_dict['recall'][nhood], 
+#                                   label='v'+ str(nhoods[nhood]))
+            plt.legend()
+            plt.show()  
     
         def plot_gan_ipr():
             fig = plt.figure(1)
@@ -214,8 +332,9 @@ if __name__ == '__main__':
                 plt.title(gan_models[i])
                 gan_dict = data[gan_models[i]]
                 for k in gan_dict.keys():
-                    ax.scatter(gan_dict[k]['precision'], gan_dict[k]['recall'], 
-                               label=k)
+                    if k != 'res15':
+                        ax.scatter(gan_dict[k]['precision'], gan_dict[k]['recall'], 
+                                   label=k)
             plt.legend()
             plt.show()  
 
@@ -358,7 +477,7 @@ if __name__ == '__main__':
     if evaluate:
         max_ind = 10000
         
-        for n_points in [1000, 5000, 7500, 10000]:
+        for n_points in [2000, 5000]:
             print('Chosen n_points: ', n_points)
             base = np.random.choice(max_ind, n_points, replace=False)
             ref_np = get_ref_samples(base)
@@ -368,137 +487,47 @@ if __name__ == '__main__':
                 print('InfoGAN model with ld: ', model, ld)
                 infogan_eval_np = get_infogan_samples(model, ld, n_points)
                 
-                infogan_eval_np_avg15 = moving_average(infogan_eval_np, n=15)
+#                infogan_eval_np_avg15 = moving_average(infogan_eval_np, n=15)
                 infogan_eval_np_avg10 = moving_average(infogan_eval_np, n=10)
                 
                 print('Starting to calculate InfoGAN PR....')
                 sess = tf.Session()
                 with sess.as_default():
-                    res_gan = iprd.knn_precision_recall_features(
+                    res0_gan = iprd.knn_precision_recall_features(
                                 ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np.reshape(-1, 7*79), nhood_sizes=[3],
+                                infogan_eval_np.reshape(-1, 7*79), 
+                                nhood_sizes=[20,25,30,50],
                                 row_batch_size=500, col_batch_size=100, num_gpus=1)
                     
-                    res_gan10 = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np_avg10.reshape(-1, 7*79), nhood_sizes=[3],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
                     
-                    res_gan15 = iprd.knn_precision_recall_features(
+                    res10_gan = iprd.knn_precision_recall_features(
                                 ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np_avg15.reshape(-1, 7*79), nhood_sizes=[3],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res5_gan = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np.reshape(-1, 7*79), nhood_sizes=[5],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res5_gan10 = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np_avg10.reshape(-1, 7*79), nhood_sizes=[5],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res5_gan15 = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np_avg15.reshape(-1, 7*79), nhood_sizes=[5],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res12_gan = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np.reshape(-1, 7*79), nhood_sizes=[12],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res12_gan10 = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np_avg10.reshape(-1, 7*79), nhood_sizes=[12],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res12_gan15 = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np_avg15.reshape(-1, 7*79), nhood_sizes=[12],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res20_gan = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np.reshape(-1, 7*79), nhood_sizes=[20],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res20_gan10 = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np_avg10.reshape(-1, 7*79), nhood_sizes=[20],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
-
-                    res20_gan15 = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np_avg15.reshape(-1, 7*79), nhood_sizes=[20],
-                                row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res15 = iprd.knn_precision_recall_features(
-                                ref_np.reshape(-1, 7*79), 
-                                infogan_eval_np_avg15.reshape(-1, 7*79), 
-                                nhood_sizes=[5, 10, 25, 50],
+                                infogan_eval_np_avg10.reshape(-1, 7*79), 
+                                nhood_sizes=[20,25,30,50],
                                 row_batch_size=500, col_batch_size=100, num_gpus=1)
                     
                     
                 final_dict[model] = {
-                        'res_gan': res_gan,
-                        'res_gan10': res_gan10,
-                        'res_gan15': res_gan15,
-                        
-                        'res5_gan': res5_gan,
-                        'res5_gan10': res5_gan10,
-                        'res5_gan15': res5_gan15,
-                        
-                        'res12_gan': res12_gan,
-                        'res12_gan10': res12_gan10,
-                        'res12_gan15': res12_gan15,
-                        
-                        'res20_gan': res20_gan,
-                        'res20_gan10': res20_gan10,
-                        'res20_gan15': res20_gan15,
-                        
-                        'res15': res15
+                        'res0_gan': res0_gan,
+                        'res10_gan': res10_gan,
                         }
                     
-            
+            #_nhood file: res15 & res keys [5, 10, 25, 50]
             for model, ld in yumi_vae_models.items():
                 print('VAE model with ld: ', model, ld)
                 vae_eval_np = get_vae_samples('vae1', 2, n_points)
     
                 print('Starting to calculate InfoGAN PR....')
                 sess = tf.Session()
-                with sess.as_default():     
-                    res_vae = iprd.knn_precision_recall_features(
-                                    ref_np.reshape(-1, 7*79), 
-                                    vae_eval_np.reshape(-1, 7*79), nhood_sizes=[3],
-                                    row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res5_vae = iprd.knn_precision_recall_features(
-                                    ref_np.reshape(-1, 7*79), 
-                                    vae_eval_np.reshape(-1, 7*79), nhood_sizes=[5],
-                                    row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res12_vae = iprd.knn_precision_recall_features(
-                                    ref_np.reshape(-1, 7*79), 
-                                    vae_eval_np.reshape(-1, 7*79), nhood_sizes=[12],
-                                    row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res20_vae = iprd.knn_precision_recall_features(
-                                    ref_np.reshape(-1, 7*79), 
-                                    vae_eval_np.reshape(-1, 7*79), nhood_sizes=[20],
-                                    row_batch_size=500, col_batch_size=100, num_gpus=1)
-                    
-                    res = iprd.knn_precision_recall_features(
+                with sess.as_default():               
+                    res0_vae = iprd.knn_precision_recall_features(
                                 ref_np.reshape(-1, 7*79), 
                                 vae_eval_np.reshape(-1, 7*79), 
-                                nhood_sizes=[5, 10, 25, 50],
+                                nhood_sizes=[15,20,25,30,50],
                                 row_batch_size=500, col_batch_size=100, num_gpus=1)
             
-                final_dict[model] = {'res_vae': res_vae, 'res5_vae': res5_vae, 
-                          'res12_vae': res12_vae, 'res20_vae': res20_vae, 
-                          'res': res}
+                final_dict[model] = {'res0_vae': res0_vae}
                 
             print('Results ready ', final_dict)
-            with open('test_pr/ipr_results_nhood_{0}samples.pkl'.format(n_points), 'wb') as f:
+            with open('test_pr/ipr_results_nhoodFinal_{0}samples.pkl'.format(n_points), 'wb') as f:
                 pickle.dump(final_dict, f)

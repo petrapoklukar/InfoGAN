@@ -365,7 +365,7 @@ if __name__ == '__main__':
     gts_data = gt_data[:, (0, 1, -1)]
     
                 
-    if False:
+    if True:
         end_results = {}        
         now = str(datetime.timestamp(datetime.now()))
         results_filename = 'disentanglement_test/disentanglement_scores_MMDalpha10_{0}.csv'.format(now)
@@ -378,15 +378,11 @@ if __name__ == '__main__':
                 end_results[model_name] = {}
                 
                 model_data = load_simulation_state_dict(model_names[i], plot=True)
-                # indices = list(map(lambda x: 0 if x[0] == 'n_equidistant_pnts' else 1, model_data['info']))
-                # n_inter = model_data['info'][indices[0]][1]
-                # n_inter_samples = int(model_data['info'][indices[1]][1])
-                # del model_data['info']
                 n_inter_samples = int(model_data['n_repeats'])
                 n_inter = int(model_data['n_equidistant_pnts'])
                 del model_data['n_repeats']
                 del model_data['n_equidistant_pnts']
-                alpha_list = [10, 10, 10]
+                alpha_list = [5, 5, 5]
                 
                 mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(
                     model_data, gts_data, n_sub_samples=200, p_value=0.001, 
@@ -411,10 +407,10 @@ if __name__ == '__main__':
                     'MMD', dp_mmd, dr_mmd, t3_mmd, 200,  0.001, n_inter, n_inter_samples, alpha_list,
                     'KS', dp_mmd, dr_mmd, t3_mmd, 500, 0.001, n_inter, n_inter_samples, 4])
                 
-                with open('disentanglement_test/INTER_disentanglement_scores_MMDalpha10_dict.pkl', 'wb') as f:
+                with open('disentanglement_test/INTER_disentanglement_scores_MMDalpha5_dict.pkl', 'wb') as f:
                     pickle.dump(end_results, f)
         
-        with open('disentanglement_test/disentanglement_scores_MMDalpha10_dict.pkl', 'wb') as f:
+        with open('disentanglement_test/disentanglement_scores_MMDalpha5_dict.pkl', 'wb') as f:
             pickle.dump(end_results, f)
      
         
