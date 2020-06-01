@@ -18,12 +18,13 @@ from itertools import groupby
 import InfoGAN_yumi as infogan
 import InfoGAN_models as models
 import matplotlib
-#matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
-matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
+matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
+#matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 import pickle
 import iprd_score as iprd 
 import tensorflow as tf
+from scipy.stats import rankdata
 
 
 class TrajDataset(Dataset):
@@ -163,12 +164,12 @@ if __name__ == '__main__':
     yumi_gan_models = {model: index_to_ld(int(model.split('_')[0][-1])) \
         for model in gan_configs}
     yumi_vae_models = {'vae' + str(i): index_to_ld(i) for i in range(1, 10)}
-    evaluate = True
-    analyse = False
+    evaluate = False
+    analyse = True
     
     if analyse:
-        n_samples = 1000
-        with open('test_pr/ipr_results_nhood_{0}samples.pkl'.format(n_samples), 'rb') as f:
+        n_samples = 2000
+        with open('test_pr/ipr_results_nhoodFinal_{0}samples.pkl'.format(n_samples), 'rb') as f:
             data_o = pickle.load(f)
         
         data = {}    
@@ -205,26 +206,55 @@ if __name__ == '__main__':
         purple = ['#d9cae8', '#a783c9', '#7545a0', '#412759']
                   
         
+        def compute_rank(nhood, s):
+            vae_res = 'res0_vae'
+            gan_res = 'res{0}_gan'.format(str(s))
+            ni = [20, 25, 30, 50].index(int(nhood))
+            
+            prec_data, rec_data = [], []
+            total = []
+            for model in sorted(data.keys()):
+                key = gan_res if 'gan' in model else vae_res
+                prec = data[model][key]['precision'][ni]
+                rec = data[model][key]['recall'][ni]
+                prec_data.append(prec)
+                rec_data.append(rec)
+                total.append(prec + rec)
+                
+            prec_rank = rankdata(prec_data, method='dense')
+            rec_rank = rankdata(rec_data, method='dense')
+            total_rank= rankdata(total, method='average')
+            
+            with open('test_pr/ipr_nhood{0}_s{1}_ranks.pkl'.format(nhood, s), 'wb') as f:
+                pickle.dump({'prec_rank': prec_rank, 'rec_rank': rec_rank, 
+                             'total_rank': total_rank}, f)
+            return prec_rank, rec_rank, total_rank
+            
+            
+                  
         def plot_gan_vae_ipr(nhoods, smooth):
 #            nhoods = ['5']#['', '5', '12', '20']
 #            smooth = ['0', '10']
+#            nhood = 20 #[20,25,30,50]
+            ni = [20, 25, 30, 50].index(int(nhoods[0]))
             
-            plt.figure(12)
+            plt.figure(12, figsize=(10, 10))
             plt.clf()
-            plt.suptitle('Improved PR scores')
+#            plt.suptitle('Improved PR scores')
             for nhood in nhoods:
                 for s in smooth:
-                    
-                    vae_res = 'res{0}_vae'.format(nhood)
-                    gan_res = 'res{0}_gan{1}'.format(nhood, s)
-                    label = 'nhood{0}_s{1}'.format(nhood, s)
+#                    vae_res = 'res{0}_vae'.format(nhood)
+#                    gan_res = 'res{0}_gan{1}'.format(nhood, s)
+                    vae_res = 'res0_vae'
+                    gan_res = 'res10_gan'
+                    s = 10
 
                     prec_list = list(map(lambda k: 
-                        data[k][vae_res]['precision'] if 'vae' in k else \
-                        data[k][gan_res]['precision'], data.keys()))
+                        data[k][vae_res]['precision'][ni] if 'vae' in k else \
+                        data[k][gan_res]['precision'][ni], data.keys()))
                     rec_list = list(map(lambda k: 
-                        data[k][vae_res]['recall'] if 'vae' in k else \
-                        data[k][gan_res]['recall'], data.keys()))    
+                        data[k][vae_res]['recall'][ni] if 'vae' in k else \
+                        data[k][gan_res]['recall'][ni], data.keys()))    
             
                     prec_min = np.round(min(prec_list) - 0.5 * 10**(-2), 2)
                     prec_max = np.round(max(prec_list) + 0.5 * 10**(-2), 2)
@@ -235,244 +265,184 @@ if __name__ == '__main__':
         #            gan_smooth = 'res_gan20'
                     xlim = (prec_min, prec_max)
                     ylim = (rec_min, rec_max)
-                    limit_axis = False
+                    limit_axis = True
                     plt.subplot(2, 2, 1)
                     for model_name in data.keys():
+                        label = '{2}_n{0}_s{1}'.format(nhood, s, model_name)
                         if model_name in vae_group1:
-                            x = data[model_name][vae_res]['precision']
-                            y = data[model_name][vae_res]['recall']
-                            plt.scatter(x, y, alpha=0.7, label=label, marker='D')
+                            x = data[model_name][vae_res]['precision'][ni]
+                            y = data[model_name][vae_res]['recall'][ni]
+                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
 #                    if show_legend:
-                    plt.legend()
+                    plt.legend(loc='upper left')
                     if limit_axis:
-                        plt.xlim(xlim)
-                        plt.ylim(ylim)
+                        plt.xlim((0.95, 1.001))
+                        plt.ylim((0.4, 0.44))
+#                    pyplot.locator_params(axis='y', nbins=5)
+                    plt.yticks(np.arange(0.4, 0.45, 0.01))
+                    
                     plt.ylabel('recall')
                     
                     plt.subplot(2, 2, 2)
                     for model_name in data.keys():
                         if model_name in vae_group2:
-                            x = data[model_name][vae_res]['precision']
-                            y = data[model_name][vae_res]['recall']
-                            plt.scatter(x, y, alpha=0.7, label=label, marker='D')
+                            label = '{2}_n{0}_s{1}'.format(nhood, s, model_name)
+                            x = data[model_name][vae_res]['precision'][ni]
+                            y = data[model_name][vae_res]['recall'][ni]
+                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
 #                    if show_legend:
-                    plt.legend()
+                    plt.legend(loc='upper left')
                     if limit_axis:
-                        plt.xlim(xlim)
-                        plt.ylim(ylim)
+                        plt.xlim((0.95, 1.001))
+                        plt.ylim((0.4, 0.44))
+                    plt.yticks(np.arange(0.4, 0.45, 0.01))
                     
                     plt.subplot(2, 2, 3)
                     for model_name in data.keys():
                         if model_name in gan_group1:
-                            x = data[model_name][gan_res]['precision']
-                            y = data[model_name][gan_res]['recall']
-                            plt.scatter(x, y, alpha=0.7, label=label, marker='D')
+#                            label = '{2}_n{0}_s{1}'.format(nhood, s, model_name)
+                            x = data[model_name][gan_res]['precision'][ni]
+                            y = data[model_name][gan_res]['recall'][ni]
+                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
 #                    if show_legend:
-                    plt.legend()
+                    plt.legend(loc='lower left')
                     if limit_axis:
-                        plt.xlim(xlim)
-                        plt.ylim(ylim)
+                        plt.xlim((0.95-0.001, 1.001))
+                        plt.ylim((0.4-0.006, 1.001))
+#                    plt.xticks(np.arange(0.95, 1.0, 0.025))
                     plt.xlabel('precision')
                     plt.ylabel('recall')
                     
                     plt.subplot(2, 2, 4)
                     for model_name in data.keys():
                         if model_name in gan_group2:
-                            x = data[model_name][gan_res]['precision']
-                            y = data[model_name][gan_res]['recall']
-                            plt.scatter(x, y, alpha=0.7, label=label, marker='D')
+                            label = '{2}_n{0}_s{1}'.format(nhood, s, model_name)
+                            x = data[model_name][gan_res]['precision'][ni]
+                            y = data[model_name][gan_res]['recall'][ni]
+                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
 #                    if show_legend:
-                    plt.legend()
+                    plt.legend(loc='lower left')
                     if limit_axis:
-                        plt.xlim(xlim)
-                        plt.ylim(ylim)
-                    plt.ylabel('recall')
+                        plt.xlim((0.95-0.001, 1.001))
+                        plt.ylim((0.4-0.006, 1.001))
+                    plt.xlabel('precision')
                     
-#            plt.legend()
-            plt.subplots_adjust(hspace=0.5)
-#                    plt.savefig('test_pr/pr_{0}samples_{1}'.format(n_samples, gan_smooth))
+            plt.tight_layout()
+            plt.subplots_adjust(hspace=0.3, wspace=0.3)
+            plt.savefig('test_pr/IPR_nhood{0}_s{1}_n_samples{2}'.format(
+                    nhood, s, n_samples))
             plt.show()
-        
-                          
-        
-    
-        def plot_res15_ipr(model='gan'):
-            key = lambda model: 'res15' if 'gan' in model  else 'res'
-            fig = plt.figure(1)
+            
+            
+        def plot_agg_gan_vae_ipr(nhood, s):
+#            nhoods = ['5']#['', '5', '12', '20']
+#            smooth = ['0', '10']
+            
+#            vae_res = 'res{0}_vae'.format(nhood)
+#            gan_res = 'res{0}_gan{1}'.format(nhood, s)
+            
+            ni = [20, 25, 30, 50].index(int(nhood))
+            vae_res = 'res0_vae'
+            gan_res = 'res10_gan'
+            s = 10
+    #        agg_fn = lambda x, y: np.sqrt(x**2 + y**2)
+            agg_fn = lambda x, y: x + y
+            fig2 = plt.figure(9, figsize=(10, 10))
             plt.clf()
-            gan_models = [k for k in data.keys() if 'gan' in k ]
-            vae_models = [k for k in data.keys() if 'vae' in k ]
-            nhoods = [5, 10]#, 25, 50]
-            model_groups = [vae_group1, vae_group2, gan_group1, gan_group2]
-            for i in range(4):
-                ax = fig.add_subplot(2, 2, i+1)
-#                plt.title(gan_models[i])
-                for model in model_groups[i]:
-                    print(model, key(model))
-                    gan_dict = data[model][key(model)]
-#                    vae_dict = data[model]['res']
-                    for nhood in range(len(nhoods)):
-                        ax.scatter(gan_dict['precision'][nhood], 
-                                   gan_dict['recall'][nhood], 
-                                   label='g'+str(nhoods[nhood]))
-                        plt.legend()
-#                        ax.scatter(vae_dict['precision'][nhood], 
-#                                   vae_dict['recall'][nhood], 
-#                                   label='v'+ str(nhoods[nhood]))
-            plt.legend()
-            plt.show()  
-    
-        def plot_gan_ipr():
-            fig = plt.figure(1)
-            plt.clf()
-            gan_models = [k for k in data.keys() if 'gan' in k ]
+            gs = fig2.add_gridspec(2, 2)#, width_ratios=[1, 2])
             
-            for i in range(len(gan_models)):
-                ax = fig.add_subplot(3, 3, i+1)
-                plt.title(gan_models[i])
-                gan_dict = data[gan_models[i]]
-                for k in gan_dict.keys():
-                    if k != 'res15':
-                        ax.scatter(gan_dict[k]['precision'], gan_dict[k]['recall'], 
-                                   label=k)
-            plt.legend()
-            plt.show()  
-
+#            fig2.suptitle('Aggregated IPR scores, nhood = {0}, gan_smoothening = {1}, n_samples = {2}'.format(
+#                    nhood, s, n_samples)) #fontsize=16)
             
-    
-        def plot_one_ipr(gan_smooth='res_gan10'):
+            vae_agg_results_g1 = []
+            vae_agg_results_g2 = []
+            gan_agg_results_g1 = []
+            gan_agg_results_g2 = []
+            for model_name in data.keys():
+                if 'vae' in model_name:
+                    x = data[model_name][vae_res]['precision'][ni]
+                    y = data[model_name][vae_res]['recall'][ni]
+                   
+                    if model_name in vae_group1:
+                        vae_agg_results_g1.append((model_name, agg_fn(x, y)))
+                    else:
+                        vae_agg_results_g2.append((model_name, agg_fn(x, y)))
+                else:
+                    
+                    x = data[model_name][gan_res]['precision'][ni]
+                    y = data[model_name][gan_res]['recall'][ni]
 
-            vae_res = 'res_vae'
+                    if model_name in gan_group1:
+                        gan_agg_results_g1.append((model_name, agg_fn(x, y)))
+                    else:
+                        gan_agg_results_g2.append((model_name, agg_fn(x, y)))
 
-            prec_list = list(map(lambda k: 
-                data[k]['res_vae']['precision'] if 'vae' in k else \
-                data[k][gan_smooth]['precision'], data.keys()))
-            rec_list = list(map(lambda k: 
-                data[k]['res_vae']['recall'] if 'vae' in k else \
-                data[k][gan_smooth]['recall'], data.keys()))    
+            vae_agg_results_g1 = sorted(vae_agg_results_g1, key=lambda x: x[1], reverse=True)
+            vae_agg_results_g2 = sorted(vae_agg_results_g2, key=lambda x: x[1], reverse=True)
+            vae_agg_g1_names, vae_agg_g1_res = zip(*vae_agg_results_g1)
+            vae_agg_g2_names, vae_agg_g2_res = zip(*vae_agg_results_g2)
             
-            prec_min = np.round(min(prec_list) - 0.5 * 10**(-2), 2)
-            prec_max = np.round(max(prec_list) + 0.5 * 10**(-2), 2)
-            rec_min = np.round(min(rec_list) - 0.5 * 10**(-2), 2)
-            rec_max = np.round(max(rec_list) + 0.5 * 10**(-2), 2)
+            gan_agg_results_g1 = sorted(gan_agg_results_g1, key=lambda x: x[1], reverse=True)
+            gan_agg_results_g2 = sorted(gan_agg_results_g2, key=lambda x: x[1], reverse=True)
+            gan_agg_g1_names, gan_agg_g1_res = zip(*gan_agg_results_g1)
+            gan_agg_g2_names, gan_agg_g2_res = zip(*gan_agg_results_g2)
             
-            plt.figure(12)
-            plt.clf()
-            plt.title('Improved PR scores')
-#            gan_smooth = 'res_gan20'
-            xlim = (prec_min, prec_max)
-            ylim = (rec_min, rec_max)
-            limit_axis = True
-
+            xlim = (0, max(list(vae_agg_g1_res) + list(vae_agg_g2_res) +
+                           list(gan_agg_g1_res) + list(gan_agg_g2_res)) + 0.1)
+            f2_ax1 = fig2.add_subplot(gs[0, 0])
+            f2_ax1.set_yticks(np.arange(len(vae_agg_g1_names)) + 1)
+            f2_ax1.set_yticklabels(vae_agg_g1_names[::-1])
+            f2_ax1.set_xlim(xlim)
+            
+            f2_ax2 = fig2.add_subplot(gs[0, 1])
+            f2_ax2.set_yticks(np.arange(len(vae_agg_g2_names)) + 1)
+            f2_ax2.set_yticklabels(vae_agg_g2_names[::-1])
+            f2_ax2.set_xlim(xlim)
+     
+            f2_ax3 = fig2.add_subplot(gs[1, 0])
+            f2_ax3.set_yticks(np.arange(len(gan_agg_g1_names)) + 1)
+            f2_ax3.set_yticklabels(gan_agg_g1_names[::-1])
+            f2_ax3.set_xlim(xlim)
+            f2_ax3.set_xlabel('Aggregated PR score')
+            
+            f2_ax4 = fig2.add_subplot(gs[1, 1])
+            f2_ax4.set_yticks(np.arange(len(gan_agg_g2_names)) + 1)
+            f2_ax4.set_yticklabels(gan_agg_g2_names[::-1])
+            f2_ax4.set_xlim(xlim)
+            f2_ax4.set_xlabel('Aggregated PR score')
+            
             for model_name in data.keys():
                 if model_name in vae_group1:
-                    x = data[model_name][vae_res]['precision']
-                    y = data[model_name][vae_res]['recall']
-                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', 
-                                color=color_dict[model_name])
-                    
+                    agg_names = vae_agg_g1_names
+                    agg_res = vae_agg_g1_res
+                    ax = f2_ax1
                 elif model_name in vae_group2:
-                    x = data[model_name][vae_res]['precision']
-                    y = data[model_name][vae_res]['recall']
-                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', 
-                                color=color_dict[model_name])
-                
+                    agg_names = vae_agg_g2_names
+                    agg_res = vae_agg_g2_res
+                    ax = f2_ax2
                 elif model_name in gan_group1:
-                    x = data[model_name][gan_smooth]['precision']
-                    y = data[model_name][gan_smooth]['recall']
-                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', 
-                                color=color_dict[model_name])
-                elif model_name in gan_group2:
-                    x = data[model_name][gan_smooth]['precision']
-                    y = data[model_name][gan_smooth]['recall']
-                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', 
-                                color=color_dict[model_name])
-            
-            plt.legend()
-            if limit_axis:
-                plt.xlim(xlim)
-                plt.ylim(ylim)
-            plt.xlabel('precision')
-            plt.ylabel('recall')
+                    agg_names = gan_agg_g1_names
+                    agg_res = gan_agg_g1_res
+                    ax = f2_ax3
+                else:
+                    agg_names = gan_agg_g2_names
+                    agg_res = gan_agg_g2_res
+                    ax = f2_ax4
+                    
+                i = len(agg_names) - agg_names.index(model_name)
+                res = agg_res[agg_names.index(model_name)]
+                
+                ax.barh(i, res, align='center', label=model_name, 
+                            height=0.5)
+                ax.legend(loc='upper left', framealpha=1)
+                    
+            plt.tight_layout()
+            plt.subplots_adjust(hspace=0.3, wspace=0.3)
+            plt.savefig('test_pr/AggIPR_nhood{0}_s{1}_n_samples{2}'.format(
+                    nhood, s, n_samples))
             plt.show()
             
-        def plot_ipr(n_samples=n_samples, gan_smooth='res_gan10'):
-            
-            vae_res = 'res_vae'
-
-            prec_list = list(map(lambda k: 
-                data[k]['res_vae']['precision'] if 'vae' in k else \
-                data[k][gan_smooth]['precision'], data.keys()))
-            rec_list = list(map(lambda k: 
-                data[k]['res_vae']['recall'] if 'vae' in k else \
-                data[k][gan_smooth]['recall'], data.keys()))    
-            
-            prec_min = np.round(min(prec_list) - 0.5 * 10**(-2), 2)
-            prec_max = np.round(max(prec_list) + 0.5 * 10**(-2), 2)
-            rec_min = np.round(min(rec_list) - 0.5 * 10**(-2), 2)
-            rec_max = np.round(max(rec_list) + 0.5 * 10**(-2), 2)
-            
-            # ------------- Plot IPR results
-            plt.figure(12)
-            plt.clf()
-            plt.suptitle('Improved PR scores')
-#            gan_smooth = 'res_gan20'
-            xlim = (prec_min, prec_max)
-            ylim = (rec_min, rec_max)
-            limit_axis = True
-            plt.subplot(2, 2, 1)
-            for model_name in data.keys():
-                if model_name in vae_group1:
-                    x = data[model_name][vae_res]['precision']
-                    y = data[model_name][vae_res]['recall']
-                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-            plt.legend()
-            if limit_axis:
-                plt.xlim(xlim)
-                plt.ylim(ylim)
-            plt.ylabel('recall')
-            
-            plt.subplot(2, 2, 2)
-            for model_name in data.keys():
-                if model_name in vae_group2:
-                    x = data[model_name][vae_res]['precision']
-                    y = data[model_name][vae_res]['recall']
-                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-            plt.legend()
-            if limit_axis:
-                plt.xlim(xlim)
-                plt.ylim(ylim)
-            
-            plt.subplot(2, 2, 3)
-            for model_name in data.keys():
-                if model_name in gan_group1:
-                    x = data[model_name][gan_smooth]['precision']
-                    y = data[model_name][gan_smooth]['recall']
-                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-            plt.legend()
-            if limit_axis:
-                plt.xlim(xlim)
-                plt.ylim(ylim)
-            plt.xlabel('precision')
-            plt.ylabel('recall')
-            
-            plt.subplot(2, 2, 4)
-            for model_name in data.keys():
-                if model_name in gan_group2:
-                    x = data[model_name][gan_smooth]['precision']
-                    y = data[model_name][gan_smooth]['recall']
-                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-            plt.legend()
-            if limit_axis:
-                plt.xlim(xlim)
-                plt.ylim(ylim)
-            plt.ylabel('recall')
-            
-            plt.subplots_adjust(hspace=0.5)
-            plt.savefig('test_pr/pr_{0}samples_{1}'.format(n_samples, gan_smooth))
-            plt.show()
-    
-    
+                         
     
     if evaluate:
         max_ind = 10000

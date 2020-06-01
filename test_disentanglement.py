@@ -355,7 +355,7 @@ def select_top3_factors(res_dict):
     dis_recall = round(len(unique_cover_list) / n_factors, 3)
     top3_results = [i + [res_dict[i[0]][0]] for i in top3_keys]
     return dis_precision, dis_recall, top3_results
-    
+
 
 if __name__ == '__main__':
     model_names = ['gan{0}'.format(str(i)) for i in range(1, 10)] + \
@@ -365,10 +365,10 @@ if __name__ == '__main__':
     gts_data = gt_data[:, (0, 1, -1)]
     
                 
-    if True:
+    if False:
         end_results = {}        
         now = str(datetime.timestamp(datetime.now()))
-        results_filename = 'disentanglement_test/disentanglement_scores_MMDalpha10_{0}.csv'.format(now)
+        results_filename = 'disentanglement_test/disentanglement_scores_MMDalpha15_pval0p001_{0}.csv'.format(now)
         with open(results_filename, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
             for i in range(len(model_names)):
@@ -382,7 +382,7 @@ if __name__ == '__main__':
                 n_inter = int(model_data['n_equidistant_pnts'])
                 del model_data['n_repeats']
                 del model_data['n_equidistant_pnts']
-                alpha_list = [5, 5, 5]
+                alpha_list = [15, 15, 15]
                 
                 mmdd, mmdd_temp, mmdd_temp1 = compute_mmd_test(
                     model_data, gts_data, n_sub_samples=200, p_value=0.001, 
@@ -407,19 +407,27 @@ if __name__ == '__main__':
                     'MMD', dp_mmd, dr_mmd, t3_mmd, 200,  0.001, n_inter, n_inter_samples, alpha_list,
                     'KS', dp_mmd, dr_mmd, t3_mmd, 500, 0.001, n_inter, n_inter_samples, 4])
                 
-                with open('disentanglement_test/INTER_disentanglement_scores_MMDalpha5_dict.pkl', 'wb') as f:
+                with open('disentanglement_test/INTER_disentanglement_scores_MMDalpha15_pval0p001_dict.pkl', 'wb') as f:
                     pickle.dump(end_results, f)
         
-        with open('disentanglement_test/disentanglement_scores_MMDalpha5_dict.pkl', 'wb') as f:
+        with open('disentanglement_test/disentanglement_scores_MMDalpha15_pval0p001_dict.pkl', 'wb') as f:
             pickle.dump(end_results, f)
      
         
-    if False:
-        with open('disentanglement_test/VAE_disentanglement_scores_MMDalpha10_dict.pkl', 'rb') as f:
-            vae_data = pickle.load(f)
+    if True:
+#        with open('disentanglement_test/VAE_disentanglement_scores_MMDalpha10_dict.pkl', 'rb') as f:
+#            vae_data = pickle.load(f)
+#            
+#        with open('disentanglement_test/GAN_disentanglement_scores_MMDalpha10_dict.pkl', 'rb') as f:
+#            gan_data = pickle.load(f)
             
-        with open('disentanglement_test/GAN_disentanglement_scores_MMDalpha10_dict.pkl', 'rb') as f:
-            gan_data = pickle.load(f)
+        with open('disentanglement_test/disentanglement_scores_MMDalpha15_pval0p001_dict.pkl', 'rb') as f:
+            data = pickle.load(f)
+            gan_data = {k: v for k, v in data.items() if 'gan' in k}
+            vae_data = {k: v for k, v in data.items() if 'vae' in k}
+            MMDalpha = 15
+            p_val = 0.001
+            
         
         # plot the results
         vae_group1 = ['vae' + str(i) for i in range(1, 6)]
@@ -428,20 +436,23 @@ if __name__ == '__main__':
         gan_group2 = ['gan' + str(i) for i in range(6, 10)]
         
         # ------------- Plot MMD results
-        plt.figure(11)
+        plt.figure(11, figsize=(10, 10))
         plt.clf()
-        plt.suptitle('MMD Disentanglement scores')
+#        plt.suptitle('MMD Disentanglement scores, alpha = {0}, pval = {1}'.format(
+#                str(MMDalpha), str(p_val)))
 
         metric = 'mmd'
+        ylim = (0.333, 1.03)
         xlim = (0.3, 0.9)
         plt.subplot(2, 2, 1)
         for model_name in vae_data.keys():
             if model_name in vae_group1:
                 x, y = vae_data[model_name][metric]
                 plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend()
+        plt.legend(loc='upper left', framealpha=0.1)
         plt.ylabel('disentangling recall')
         plt.xlim(xlim)
+        plt.ylim(ylim)
         plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
         
         plt.subplot(2, 2, 2)
@@ -450,7 +461,8 @@ if __name__ == '__main__':
                 x, y = vae_data[model_name][metric]
                 plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
         plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
-        plt.legend()
+        plt.legend(loc='lower right', framealpha=0.1)
+        plt.ylim(ylim)
         plt.xlim(xlim)
         
         plt.subplot(2, 2, 3)
@@ -458,8 +470,9 @@ if __name__ == '__main__':
             if model_name in gan_group1:
                 x, y = gan_data[model_name][metric]
                 plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend()
+        plt.legend(framealpha=0.1)
         plt.xlim(xlim)
+        plt.ylim(ylim)
         plt.xlabel('disentangling precision')
         plt.ylabel('disentangling recall')
         plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
@@ -469,29 +482,34 @@ if __name__ == '__main__':
             if model_name in gan_group2:
                 x, y = gan_data[model_name][metric]
                 plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend()
+        plt.legend(loc='lower right', framealpha=0.1)
         plt.xlim(xlim)
+        plt.ylim(ylim)
         plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
-        plt.ylabel('disentangling recall')
-        plt.subplots_adjust(hspace=0.5)
+        plt.xlabel('disentangling precision')
+        plt.tight_layout()
+        plt.subplots_adjust(hspace=0.3, wspace=0.3)
         plt.show()
         
         
         # ------------- Plot MMD Agg 
-        fig2 = plt.figure(9, constrained_layout=True, figsize=(5, 5))
+#        agg_fn = lambda x, y: np.sqrt(x**2 + y**2)
+        agg_fn = lambda x, y: x + y
+        fig2 = plt.figure(9, figsize=(10, 10))
         plt.clf()
         gs = fig2.add_gridspec(2, 2)#, width_ratios=[1, 2])
         xlim = (0, 1.8)
-        fig2.suptitle('MMD Aggregated Disentanglement scores') #fontsize=16)
+#        fig2.suptitle('MMD Aggregated Disentanglement scores, alpha = {0}, pval = {1}'.format(
+#                str(MMDalpha), str(p_val)))
         
         vae_agg_results_g1 = []
         vae_agg_results_g2 = []
         for model_name in vae_data.keys():
             x, y = vae_data[model_name]['mmd']
             if model_name in vae_group1:
-                vae_agg_results_g1.append((model_name, x+y))
+                vae_agg_results_g1.append((model_name, agg_fn(x, y)))
             else:
-                vae_agg_results_g2.append((model_name, x+y))
+                vae_agg_results_g2.append((model_name, agg_fn(x, y)))
         
         vae_agg_results_g1 = sorted(vae_agg_results_g1, key=lambda x: x[1], reverse=True)
         vae_agg_results_g2 = sorted(vae_agg_results_g2, key=lambda x: x[1], reverse=True)
@@ -503,9 +521,9 @@ if __name__ == '__main__':
         for model_name in gan_data.keys():
             x, y = gan_data[model_name]['mmd']
             if model_name in gan_group1:
-                gan_agg_results_g1.append((model_name, x+y))
+                gan_agg_results_g1.append((model_name, agg_fn(x, y)))
             else:
-                gan_agg_results_g2.append((model_name, x+y))
+                gan_agg_results_g2.append((model_name, agg_fn(x, y)))
         
         gan_agg_results_g1 = sorted(gan_agg_results_g1, key=lambda x: x[1], reverse=True)
         gan_agg_results_g2 = sorted(gan_agg_results_g2, key=lambda x: x[1], reverse=True)
@@ -526,11 +544,13 @@ if __name__ == '__main__':
         f2_ax3.set_yticks(np.arange(len(gan_agg_g1_names)) + 1)
         f2_ax3.set_yticklabels(gan_agg_g1_names[::-1])
         f2_ax3.set_xlim(xlim)
+        f2_ax3.set_xlabel('MMD aggregated score')
         
         f2_ax4 = fig2.add_subplot(gs[1, 1])
         f2_ax4.set_yticks(np.arange(len(gan_agg_g2_names)) + 1)
         f2_ax4.set_yticklabels(gan_agg_g2_names[::-1])
         f2_ax4.set_xlim(xlim)
+        f2_ax4.set_xlabel('MMD aggregated score')
         
         for model_name in vae_data.keys():
             x, y = vae_data[model_name]['mmd']
@@ -548,7 +568,7 @@ if __name__ == '__main__':
             
             ax.barh(i, res, align='center', label=model_name, 
                         height=0.5)
-            ax.legend()
+            ax.legend(loc='upper left', framealpha=1)
                 
         for model_name in gan_data.keys():
             x, y = gan_data[model_name]['mmd']
@@ -566,17 +586,18 @@ if __name__ == '__main__':
             
             ax.barh(i, res, align='center', label=model_name, 
                         height=0.5)
-            ax.legend()
-        # plt.subplots_adjust(hspace=0.5)
+            ax.legend(loc='upper left', framealpha=1)
+        plt.tight_layout()
+        plt.subplots_adjust(hspace=0.3, wspace=0.3)
         plt.show()
                 
 
         
         
         # ------------- Plot KS results
-        plt.figure(12)
+        plt.figure(13)
         plt.clf()
-        plt.suptitle('MMD Disentanglement scores')
+        plt.suptitle('KS Disentanglement scores, pval = ' + str(p_val))
         
         metric = 'ks'
         xlim = (0.7, 1.7)
@@ -626,11 +647,11 @@ if __name__ == '__main__':
         
         
         # ------------- Plot Agg KS
-        fig2 = plt.figure(13, constrained_layout=True, figsize=(5, 5))
+        fig2 = plt.figure(14, constrained_layout=True, figsize=(5, 5))
         plt.clf()
         gs = fig2.add_gridspec(2, 2)#, width_ratios=[1, 2])
         xlim = (0, 3)
-        fig2.suptitle('KS Aggregated Disentanglement scores') #fontsize=16)
+        fig2.suptitle('KS Aggregated Disentanglement scores, pval = ' +  str(p_val))
         
         vae_agg_results_g1 = []
         vae_agg_results_g2 = []
