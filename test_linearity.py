@@ -14,6 +14,8 @@ import pickle
 import matplotlib
 matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
+from scipy.stats import rankdata
+
 
 def sample_fixed_noise(ntype, n_samples, noise_dim, var_range=1, device='cpu'):
     """Samples one type of noise only."""
@@ -63,12 +65,10 @@ def test_linearity(Z, S, split=True):
 #        ld = Z.shape[-1]
 #        min_params = 3 * ld + 3
 #        splitratio = min_params + min_params % 10
-        splitratio = int(len(Z) * 0.20)
+        splitratio = int(len(Z) * 0.70)
         Z_train, Z_test = Z[:splitratio, :], Z[splitratio:, :]
         S_train, S_test = S[:splitratio, :], S[splitratio:, :]
-#        print(Z_train.shape, Z_test.shape)
         reg = LinearRegression().fit(Z_train, S_train)
-        print(reg.coef_.shape)
         S_pred = reg.predict(Z_test)
         mse = round(mean_squared_error(S_test, S_pred), 3)
         reg_score = round(reg.score(Z_test, S_test), 3)
@@ -77,7 +77,26 @@ def test_linearity(Z, S, split=True):
         S_pred = reg.predict(Z)
         mse = round(mean_squared_error(S, S), 3)
         reg_score = round(reg.score(Z, S), 3)
+        
     return mse, reg_score
+
+def compute_rank():    
+    key = 'reg_score'
+    total = []
+    for model in sorted(lin_scores.keys()):
+        score = lin_scores[model][key]
+        total.append(score)
+        
+    total_rank_avg = rankdata(total, method='average')
+    total_rank_min = rankdata(total, method='min')
+
+    with open('linearity_test/linearity_npoints{0}_var{1}_ranks.pkl'.format(
+            str(20), str(0.05)), 'wb') as f:
+        pickle.dump({'total_rank_avg': total_rank_avg, 
+                     'total_rank_min': total_rank_min, 
+                     'total': total}, f)
+        
+    return total_rank_min
 
 models = ['gan' + str(i) for i in range(1, 10)] + ['vae' + str(i) for i in range(1, 10)]
 
@@ -97,11 +116,11 @@ if False:
             mse, reg_score = test_linearity(Z, S, split=True)
             lin_scores[model]['mse'] += mse 
             lin_scores[model]['reg_score'] += reg_score 
-            print(lin_scores[model]['reg_score'])
+#            print(lin_scores[model]['reg_score'])
         lin_scores[model]['mse'] /= data['num_points']
         lin_scores[model]['reg_score'] /= data['num_points']
 
-if True:
+if False:
     vae_group1 = ['vae' + str(i) for i in range(1, 6)]
     vae_group2 = ['vae' + str(i) for i in range(6, 10)]
     gan_group1 = ['gan' + str(i) for i in range(1, 6)]
@@ -147,3 +166,125 @@ if True:
     plt.tight_layout()
     plt.subplots_adjust(hspace=0.3, wspace=0.3)
     plt.show()
+    
+    fig2 = plt.figure(9, figsize=(10, 10))
+    plt.clf()
+    xmin = min(lin_scores[model][key] for model in lin_scores.keys())
+    xlim = (xmin - xmin % 0.01, 1.0)
+    gs = fig2.add_gridspec(2, 2)#, width_ratios=[1, 2])
+    
+    vae_sgroup1 = sorted(vae_group1, key=lambda x: lin_scores[x][key], reverse=True)
+    f2_ax1 = fig2.add_subplot(gs[0, 0])
+    f2_ax1.set_yticks(np.arange(len(vae_sgroup1)) + 1)
+    f2_ax1.set_yticklabels(vae_sgroup1[::-1])
+#    f2_ax1.set_xlim((0.99, 1.0))
+    f2_ax1.set_xlim(xlim)
+    
+    vae_sgroup2 = sorted(vae_group2, key=lambda x: lin_scores[x][key], reverse=True)
+    f2_ax2 = fig2.add_subplot(gs[0, 1])
+    f2_ax2.set_yticks(np.arange(len(vae_sgroup2)) + 1)
+    f2_ax2.set_yticklabels(vae_sgroup2[::-1])
+#    f2_ax2.set_xlim((0.99, 1.0))
+    f2_ax2.set_xlim(xlim)
+ 
+    gan_sgroup1 = sorted(gan_group1, key=lambda x: lin_scores[x][key], reverse=True)
+    f2_ax3 = fig2.add_subplot(gs[1, 0])
+    f2_ax3.set_yticks(np.arange(len(gan_sgroup1)) + 1)
+    f2_ax3.set_yticklabels(gan_sgroup1[::-1])
+    f2_ax3.set_xlabel('R2 linearity score')
+    f2_ax3.set_xlim(xlim)
+    
+    gan_sgroup2 = sorted(gan_group2, key=lambda x: lin_scores[x][key], reverse=True)
+    f2_ax4 = fig2.add_subplot(gs[1, 1])
+    f2_ax4.set_yticks(np.arange(len(gan_sgroup2)) + 1)
+    f2_ax4.set_yticklabels(gan_sgroup2[::-1])
+    f2_ax4.set_xlabel('MMD aggregated score')
+    f2_ax4.set_xlim(xlim)
+    
+    for model_name in lin_scores.keys():
+        res = lin_scores[model_name][key]
+        if model_name in vae_group1:
+            agg_names = vae_sgroup1
+            ax = f2_ax1
+        elif model_name in vae_group2:
+            agg_names = vae_sgroup2
+            ax = f2_ax2
+        elif model_name in gan_group1:
+            agg_names = gan_sgroup1
+            ax = f2_ax3
+        else:
+            agg_names = gan_sgroup2
+            ax = f2_ax4
+        
+        i = len(agg_names) - agg_names.index(model_name)
+        
+        ax.barh(i, res, align='center', label=model_name, 
+                    height=0.5)
+#        ax.legend(loc='upper left', framealpha=1)
+        
+    plt.tight_layout()
+    plt.subplots_adjust(hspace=0.3, wspace=0.3)
+    plt.show()
+    
+if False:
+    with open('linearity_test/linearity_npoints{0}_var{1}_ranks.pkl'.format(
+            str(20), str(0.05)), 'rb') as f:
+        lin_rank_dict = pickle.load(f)
+        
+    with open('test_pr/ipr_nhood{0}_s{1}_ranks.pkl'.format('20', '10'), 'rb') as f:
+        ipr_rank_dict = pickle.load(f)
+        
+    with open('disentanglement_test/disentanglement_MMDalpha{0}_pval{1}_ranks.pkl'.format(
+            '15', '0.001'), 'rb') as f:
+        dis_rank_dict = pickle.load(f)
+        
+    model_names = ['gan{0}'.format(str(i)) for i in range(1, 10)] + \
+        ['vae{0}'.format(str(i)) for i in range(1, 10)] 
+        
+    # Average ranking
+    key = '_avg'
+    score_sep_avg = np.round(
+            (lin_rank_dict['total_rank' + key] + \
+             ipr_rank_dict['prec_rank' + key] + \
+             ipr_rank_dict['rec_rank' + key] + \
+             dis_rank_dict['prec_rank' + key] + \
+             dis_rank_dict['rec_rank' + key]) / 5, 3)
+    
+    score_tot_avg = np.round(
+            (lin_rank_dict['total_rank' + key] + \
+             ipr_rank_dict['total_rank' + key] + \
+             dis_rank_dict['total_rank' + key]) / 3, 3)
+    
+    score_sep = np.round(np.mean(
+            [lin_rank_dict['total'], ipr_rank_dict['prec'],
+             ipr_rank_dict['rec'], dis_rank_dict['prec'],
+             dis_rank_dict['rec']], axis=0), 3)
+    
+    ratio = 1
+    score_sep2 = np.round(np.mean(
+            [lin_rank_dict['total'], 
+             ratio * np.array(ipr_rank_dict['rec']) + (1- 2) * np.array(ipr_rank_dict['prec']),
+             0.5 * np.array(dis_rank_dict['prec']) + (1- 0.5) * np.array(dis_rank_dict['rec'])], axis=0), 3)
+    
+    score_tot = np.round(np.mean(
+            [lin_rank_dict['total'], ipr_rank_dict['total'], 
+             dis_rank_dict['total']], axis=0), 3)
+        
+    # Minimum ranking
+    key = '_min'
+    score_sep_min = np.round(
+            (lin_rank_dict['total_rank' + key] + \
+             ipr_rank_dict['prec_rank' + key] + \
+             ipr_rank_dict['rec_rank' + key] + \
+             dis_rank_dict['prec_rank' + key] + \
+             dis_rank_dict['rec_rank' + key]) / 5, 3)
+    
+    score_tot_min = np.round(
+            (lin_rank_dict['total_rank' + key] + \
+             ipr_rank_dict['total_rank' + key] + \
+             dis_rank_dict['total_rank' + key]) / 3, 3)
+        
+    scores = [score_sep_avg, score_tot_avg, score_sep_min, score_tot_min]
+    for score in [score_sep2, score_tot]:
+        print(sorted(list(zip(model_names, score)), key=lambda x:x[1]))
+        

@@ -221,14 +221,21 @@ if __name__ == '__main__':
                 rec_data.append(rec)
                 total.append(prec + rec)
                 
-            prec_rank = rankdata(prec_data, method='dense')
-            rec_rank = rankdata(rec_data, method='dense')
-            total_rank= rankdata(total, method='average')
+            prec_rank_min = rankdata(prec_data, method='min')
+            prec_rank_avg = rankdata(prec_data, method='average')
+            rec_rank_min = rankdata(rec_data, method='min')
+            rec_rank_avg = rankdata(rec_data, method='average')
+            total_rank_min = rankdata(total, method='min')
+            total_rank_avg = rankdata(total, method='average')
             
             with open('test_pr/ipr_nhood{0}_s{1}_ranks.pkl'.format(nhood, s), 'wb') as f:
-                pickle.dump({'prec_rank': prec_rank, 'rec_rank': rec_rank, 
-                             'total_rank': total_rank}, f)
-            return prec_rank, rec_rank, total_rank
+                pickle.dump({
+                        'prec_rank_min': prec_rank_min, 'prec_rank_avg': prec_rank_avg, 
+                         'rec_rank_min': rec_rank_min, 'rec_rank_avg': rec_rank_avg, 
+                         'total_rank_min': total_rank_min, 
+                         'total_rank_avg': total_rank_avg,
+                         'total': total, 'prec': prec_data, 'rec': rec_data}, f)
+            return prec_rank_min, rec_rank_min, total_rank_min
             
             
                   

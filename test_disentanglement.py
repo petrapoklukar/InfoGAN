@@ -18,6 +18,7 @@ import heapq
 import csv
 import os
 from datetime import datetime
+from scipy.stats import rankdata
 
 class FullyConnecteDecoder(nn.Module):
     def __init__(self, input_size, output_size):
@@ -357,6 +358,34 @@ def select_top3_factors(res_dict):
     return dis_precision, dis_recall, top3_results
 
 
+def compute_rank(alpha, pval):    
+    prec_data, rec_data = [], []
+    total = []
+    key = 'mmd'
+    for model in sorted(data.keys()):
+        prec = data[model][key][0]
+        rec = data[model][key][1]
+        prec_data.append(prec)
+        rec_data.append(rec)
+        total.append(prec + rec)
+        
+    prec_rank_min = rankdata(prec_data, method='min')
+    prec_rank_avg = rankdata(prec_data, method='average')
+    rec_rank_min = rankdata(rec_data, method='min')
+    rec_rank_avg = rankdata(rec_data, method='average')
+    total_rank_min = rankdata(total, method='min')
+    total_rank_avg = rankdata(total, method='average')
+    
+    with open('disentanglement_test/disentanglement_MMDalpha{0}_pval{1}_ranks.pkl'.format(
+            str(alpha), str(pval)), 'wb') as f:
+        pickle.dump({'prec_rank_min': prec_rank_min, 'prec_rank_avg': prec_rank_avg, 
+                     'rec_rank_min': rec_rank_min, 'rec_rank_avg': rec_rank_avg, 
+                     'total_rank_min': total_rank_min, 
+                     'total_rank_avg': total_rank_avg, 
+                     'total': total, 'prec': prec_data, 'rec': rec_data}, f)
+        
+    return prec_rank_min, rec_rank_min, total_rank_min
+
 if __name__ == '__main__':
     model_names = ['gan{0}'.format(str(i)) for i in range(1, 10)] + \
         ['vae{0}'.format(str(i)) for i in range(1, 10)]
@@ -414,7 +443,7 @@ if __name__ == '__main__':
             pickle.dump(end_results, f)
      
         
-    if True:
+    if False:
 #        with open('disentanglement_test/VAE_disentanglement_scores_MMDalpha10_dict.pkl', 'rb') as f:
 #            vae_data = pickle.load(f)
 #            
