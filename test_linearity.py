@@ -77,7 +77,7 @@ def test_linearity(Z, S, split=True):
         S_pred = reg.predict(Z)
         mse = round(mean_squared_error(S, S), 3)
         reg_score = round(reg.score(Z, S), 3)
-        
+    print(mse, reg_score)
     return mse, reg_score
 
 def compute_rank():    
@@ -177,15 +177,15 @@ if False:
     f2_ax1 = fig2.add_subplot(gs[0, 0])
     f2_ax1.set_yticks(np.arange(len(vae_sgroup1)) + 1)
     f2_ax1.set_yticklabels(vae_sgroup1[::-1])
-#    f2_ax1.set_xlim((0.99, 1.0))
-    f2_ax1.set_xlim(xlim)
+    f2_ax1.set_xlim((0.99, 1.0))
+#    f2_ax1.set_xlim(xlim)
     
     vae_sgroup2 = sorted(vae_group2, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax2 = fig2.add_subplot(gs[0, 1])
     f2_ax2.set_yticks(np.arange(len(vae_sgroup2)) + 1)
     f2_ax2.set_yticklabels(vae_sgroup2[::-1])
-#    f2_ax2.set_xlim((0.99, 1.0))
-    f2_ax2.set_xlim(xlim)
+    f2_ax2.set_xlim((0.99, 1.0))
+#    f2_ax2.set_xlim(xlim)
  
     gan_sgroup1 = sorted(gan_group1, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax3 = fig2.add_subplot(gs[1, 0])
@@ -260,11 +260,17 @@ if False:
              ipr_rank_dict['rec'], dis_rank_dict['prec'],
              dis_rank_dict['rec']], axis=0), 3)
     
+    score_sep = np.round(np.sum(
+            [lin_rank_dict['total'], ipr_rank_dict['prec'],
+             ipr_rank_dict['rec'], dis_rank_dict['prec'],
+             dis_rank_dict['rec']], axis=0), 3)
+    
     ratio = 1
     score_sep2 = np.round(np.mean(
             [lin_rank_dict['total'], 
-             ratio * np.array(ipr_rank_dict['rec']) + (1- 2) * np.array(ipr_rank_dict['prec']),
-             0.5 * np.array(dis_rank_dict['prec']) + (1- 0.5) * np.array(dis_rank_dict['rec'])], axis=0), 3)
+             ratio * np.array(ipr_rank_dict['rec']) + (1- 1) * np.array(ipr_rank_dict['prec']),
+#             0.5 * np.array(dis_rank_dict['prec']) + (1- 0.5) * np.array(dis_rank_dict['rec'])
+             dis_rank_dict['total']], axis=0), 3)
     
     score_tot = np.round(np.mean(
             [lin_rank_dict['total'], ipr_rank_dict['total'], 
@@ -285,6 +291,6 @@ if False:
              dis_rank_dict['total_rank' + key]) / 3, 3)
         
     scores = [score_sep_avg, score_tot_avg, score_sep_min, score_tot_min]
-    for score in [score_sep2, score_tot]:
+    for score in [score_tot]:
         print(sorted(list(zip(model_names, score)), key=lambda x:x[1]))
         

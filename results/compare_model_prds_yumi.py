@@ -401,7 +401,7 @@ def get_vae_samples(config_name, ld, n_prd_samples):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Load the trained model
-    filename = '../models/VAEs/{}.mdl'.format(config_name)
+    filename = '../models/models/{}.mdl'.format(config_name)
     model = models.FullyConnecteDecoder(ld, 7*79)
     model_dict = {}
     for k, v in torch.load(filename, map_location=device).items():
@@ -409,16 +409,6 @@ def get_vae_samples(config_name, ld, n_prd_samples):
             k_new = '.'.join(k.split('.')[1:])
             model_dict[k_new] = v
     model.load_state_dict(model_dict)
-
-    # Number of samples to calculate PR on
-#    n_prd_samples = len(baseline_indices)
-    
-#    # Get the ground truth np array from the test split
-#    path_to_data = '../dataset/robot_trajectories/yumi_joint_pose.npy'
-#    test_dataset = TrajDataset(path_to_data, device, scaled=False)
-#    ref_np = test_dataset.get_subset(
-#        len(test_dataset), n_prd_samples, fixed_indices=baseline_indices, 
-#        reshape=False).transpose(0, 2, 1)
 
     # Get the sampled np array
     with torch.no_grad():
@@ -428,51 +418,59 @@ def get_vae_samples(config_name, ld, n_prd_samples):
     
 
 def get_infogan_samples(config_name, ld, n_prd_samples, chpnt=''):
-    parent_dir = '../'
-    config_file = os.path.join(parent_dir, 'configs', config_name + '.py')
-    export_directory = os.path.join(parent_dir, 'models', config_name)
-
-    print(' *- Config name: {0}'.format(config_name))
-    
-    config_file = SourceFileLoader(config_name, config_file).load_module().config 
-    config_file['train_config']['exp_name'] = config_name
-    config_file['train_config']['exp_dir'] = export_directory # the place where logs, models, and other stuff will be stored
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    config_file['train_config']['device'] = device
-    print('Device is: {}'.format(device))
-
+    
     # Load the trained model
-    model = infogan.InfoGAN(config_file)
-    eval_config = config_file['eval_config']
-    eval_config['filepath'] = parent_dir + eval_config['filepath'].format(config_name)
+    model = models.FullyConnecteDecoder(ld, 7*79)
+    filename = '../models/models/{0}.pt'.format(config_name)
+    model_dict = torch.load(filename, map_location=device)
+    model.load_state_dict(model_dict)
+    model = model.to(device)
     
-    if chpnt:
-        model.load_checkpoint(
-            '../models/{0}/infogan_checkpoint{1}.pth'.format(config_name, chpnt))
-        model.Gnet.eval()
-
-    else:
-        model.load_model(eval_config)
-        print(eval_config)
+#    parent_dir = '../'
+#    config_file = os.path.join(parent_dir, 'configs', config_name + '.py')
+#    export_directory = os.path.join(parent_dir, 'models', config_name)
+#
+#    print(' *- Config name: {0}'.format(config_name))
+#    
+#    config_file = SourceFileLoader(config_name, config_file).load_module().config 
+#    config_file['train_config']['exp_name'] = config_name
+#    config_file['train_config']['exp_dir'] = export_directory # the place where logs, models, and other stuff will be stored
+#
+#    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#    config_file['train_config']['device'] = device
+#    print('Device is: {}'.format(device))
+#
+#    # Load the trained model
+#    model = infogan.InfoGAN(config_file)
+#    eval_config = config_file['eval_config']
+#    eval_config['filepath'] = parent_dir + eval_config['filepath'].format(config_name)
+#    
+#    if chpnt:
+#        model.load_checkpoint(
+#            '../models/{0}/infogan_checkpoint{1}.pth'.format(config_name, chpnt))
+#        model.Gnet.eval()
+#
+#    else:
+#        model.load_model(eval_config)
+#        print(eval_config)
         
-    # Number of samples to calculate PR on
-#    n_prd_samples = eval_config['n_prd_samples']
-    
     # Get the ground truth np array from the test split
-    path_to_data = parent_dir + config_file['data_config']['path_to_data']
+#    path_to_data = parent_dir + config_file['data_config']['path_to_data']
+    path_to_data = '../dataset/robot_trajectories/yumi_joint_pose.npy'
     test_dataset = TrajDataset(path_to_data, device, scaled=False)
-#    ref_np = test_dataset.get_subset(
-#        len(test_dataset), n_prd_samples, fixed_indices=baseline_indices, 
-#        reshape=False).transpose(0, 2, 1)
 
     # Get the sampled np array
     with torch.no_grad():
-        z_noise, con_noise = model.ginput_noise(n_prd_samples)
-        eval_data = model.g_forward(z_noise, con_noise)
+        z_noise = torch.empty((n_prd_samples, ld), device=device).uniform_(-1, 1)
+        eval_data = model(z_noise).detach()
         eval_np = test_dataset.descale(eval_data).reshape(-1, 7, 79)
-        # eval_np_smooth = moving_average(eval_np, 20)
-    return eval_np
+        
+#        z_noise, con_noise = model.ginput_noise(n_prd_samples)
+#        eval_data = model.g_forward(z_noise, con_noise)
+#        eval_np = test_dataset.descale(eval_data).reshape(-1, 7, 79)
+        eval_np_smooth = moving_average(eval_np, n=10)
+    return eval_np_smooth, eval_np
 
 
 def plot_example_traj(vae_ref_np, vae_eval_np, infogan_ref_np, infogan_eval_np):
@@ -533,25 +531,44 @@ def moving_average_mean(x, n):
                                    axis, x_padded)
     return x_smooth
     
-    
-def moving_average(x, n, plot=False):
+def moving_average(x, n):
     axis = 2
     y_padded = np.pad(x, ((0, 0), (0, 0), (n//2, n-1-n//2)), mode='edge')
-    if plot:
-        y_padded = np.pad(x, ((0, 0), (n//2, n-1-n//2), (0, 0)), mode='edge')
-        axis = 1
+    y_smooth = np.apply_along_axis(
+            lambda ax: np.convolve(ax, np.ones((n,))/n, mode='valid'), 
+            axis, y_padded)
+    return y_smooth 
+
+def moving_average_plot(x, n):
+    y_padded = np.pad(x, ((0, 0), (n//2, n-1-n//2), (0, 0)), mode='edge')
+    axis = 1
     y_smooth = np.apply_along_axis(lambda ax: np.convolve(ax, np.ones((n,))/n, mode='valid'), 
                                    axis, y_padded)
     return y_smooth 
 
+
+
 if __name__ == '__main__':    
     
     max_ind = 10000
-    n_points = 5000
+    n_points = 2000
     base = np.random.choice(max_ind, n_points, replace=False)
+    gan_configs = [
+            'infogan1_l01_s2_4RL_model',
+            'infogan2_l15_s2_4RL_model',
+            'infogan3_l35_s2_4RL_model',
+            'infogan4_l01_s3_4RL_model',
+            'infogan5_l15_s3_4RL_model',
+            'infogan6_l35_s3_4RL_model',
+            'infogan7_l01_s6_4RL_model',
+            'infogan8_l15_s6_4RL_model',
+            'infogan9_l35_s6_4RL_model']
+    yumi_gan_models = {model: index_to_ld(int(model.split('_')[0][-1])) \
+        for model in gan_configs}
+    yumi_vae_models = {'vae' + str(i): index_to_ld(i) for i in range(1, 10)}
     
-    yumi_gan_models = get_model_names() 
-    yumi_vae_models = {'vae_' + str(i): index_to_ld(i) for i in range(1, 10)}
+#    yumi_gan_models = get_model_names() 
+#    yumi_vae_models = {'vae_' + str(i): index_to_ld(i) for i in range(1, 10)}
     
     color_list = ['black', 'gold', 'orange', 'red', 'green', 'cyan', 
                   'dodgerblue', 'blue', 'darkviolet', 'magenta', 'deeppink']
@@ -565,101 +582,264 @@ if __name__ == '__main__':
     # plot_dgm_prds(vae_res_dict, infogan_res_dict)
     
     if False:
-        ref_np = get_ref_samples(base)
-        vae_eval_np = get_vae_samples('vae_1', 2, n_points)
-        infogan_eval_np = get_infogan_samples('InfoGAN_yumi_l15_s2_SnetS', 2, n_points)
-        
-        infogan_eval_np_avg20 = moving_average(infogan_eval_np, n=15, plot=False)
-        infogan_eval_np_avg10 = moving_average(infogan_eval_np, n=10, plot=False)
-        infogan_eval_np_avg5 = moving_average(infogan_eval_np, n=5, plot=False)
-        
-#        plot_example_traj(vae_ref_np, vae_eval_np, infogan_ref_np, infogan_eval_np)
-#        plot_example_traj(vae_ref_np, infogan_eval_np, infogan_ref_np, infogan_eval_np_avg10)
-        
-        import iprd_score as iprd 
-        import tensorflow as tf
-        sess = tf.Session()
-        with sess.as_default():
-            res_gan = iprd.knn_precision_recall_features(
-                        ref_np.reshape(-1, 7*79), 
-                        infogan_eval_np.reshape(-1, 7*79), nhood_sizes=[3],
-                        row_batch_size=500, col_batch_size=100, num_gpus=1)   
-        sess = tf.Session()
-        with sess.as_default():
-            res_gan1 = iprd.knn_precision_recall_features(
-                        ref_np.reshape(-1, 7*79), 
-                        infogan_eval_np_avg10.reshape(-1, 7*79), nhood_sizes=[3],
-                        row_batch_size=500, col_batch_size=100, num_gpus=1)   
-        
-        sess = tf.Session()
-        with sess.as_default():
-            res_gan2 = iprd.knn_precision_recall_features(
-                        ref_np.reshape(-1, 7*79), 
-                        infogan_eval_np_avg20.reshape(-1, 7*79), nhood_sizes=[3],
-                        row_batch_size=500, col_batch_size=100, num_gpus=1)   
-        
-        sess = tf.Session()
-        with sess.as_default():
-            res_gan3 = iprd.knn_precision_recall_features(
-                        ref_np.reshape(-1, 7*79), 
-                        infogan_eval_np_avg20.reshape(-1, 7*79), nhood_sizes=[5],
-                        row_batch_size=500, col_batch_size=100, num_gpus=1)   
+        ref_np = get_ref_samples(base).reshape(-1, 7*79)
+    
+        data_o = {}
+        for model, ld in yumi_gan_models.items():
+            infogan_eval_np, _ = get_infogan_samples(model, ld, n_points)
+            infogan_eval_np = infogan_eval_np.reshape(-1, 7*79)
             
-        sess = tf.Session()
-        with sess.as_default():
-            res1 = iprd.knn_precision_recall_features(
-                    ref_np.reshape(-1, 7*79), 
-                    vae_eval_np.reshape(-1, 7*79), nhood_sizes=[3],
-                    row_batch_size=500, col_batch_size=100, num_gpus=1)   
-        
-        
-        prec, rec = prd.compute_prd_from_embedding(
-            np.mean(vae_eval_np, axis=1), 
-            np.mean(vae_ref_np, axis=1), 
-            num_clusters=7) 
-        print(prd.prd_to_max_f_beta_pair(prec, rec))
-        
-        prec, rec = prd.compute_prd_from_embedding(
-            np.mean(infogan_eval_np, axis=1), 
-            np.mean(infogan_ref_np, axis=1), 
-            num_clusters=7) 
-        print(prd.prd_to_max_f_beta_pair(prec, rec))
-        
-        import scipy.signal
-        
-        plt.figure(1)
-        plt.clf()
-        plt.subplot(2, 3, 1)
-        x = np.mean(vae_ref_np, axis=0)
-        for i in range(7):
-            plt.plot(x[:, i])
+            prec, rec = prd.compute_prd_from_embedding(
+                    infogan_eval_np, ref_np, num_clusters=20) 
+            f8, f18 = prd.prd_to_max_f_beta_pair(prec, rec)
+            data_o[model] = {'precision': f8, 'recall': f18}
             
-        plt.subplot(2, 3, 2)
-        x = np.mean(vae_eval_np, axis=0)
-        for i in range(7):
-            plt.plot(x[:, i])
+        for model, ld in yumi_vae_models.items():
+            vae_eval_np = get_vae_samples(model, ld, n_points)
+            vae_eval_np = vae_eval_np.reshape(-1, 7*79)
             
-        plt.subplot(2, 3, 3)
-        x = scipy.signal.savgol_filter(np.mean(infogan_eval_np, axis=0), 13, 1, axis=0) 
-        for i in range(7):
-            plt.plot(x[:, i])
+            prec, rec = prd.compute_prd_from_embedding(
+                    vae_eval_np, ref_np, num_clusters=20) 
+            f8, f18 = prd.prd_to_max_f_beta_pair(prec, rec)
+            data_o[model] = {'precision': f8, 'recall': f18}
         
-        plt.subplot(2, 3, 4)
-        x = np.mean(infogan_ref_np, axis=0)
-        for i in range(7):
-            plt.plot(x[:, i])
+        data = {}    
+        for key, value in data_o.items():
+            if 'infogan' in key:
+                new_key = key.split('_')[0][4:]
+                data[new_key] = value
+            else:
+                data[key] = value
+    
+    if True:
+        vae_group1 = ['vae' + str(i) for i in range(1, 6)]
+        vae_group2 = ['vae' + str(i) for i in range(6, 10)]
+        gan_group1 = ['gan' + str(i) for i in range(1, 6)]
+        gan_group2 = ['gan' + str(i) for i in range(6, 10)]
+        
+        def plot_gan_vae_pr():
+            s = 10
+            clusters= 20
             
-        plt.subplot(2, 3, 5)
-        x = moving_average_mean(np.mean(infogan_eval_np, axis=0), 5)
-        for i in range(7):
-            plt.plot(x[:, i])
             
-        plt.subplot(2, 3, 6)
-        x = np.mean(infogan_eval_np, axis=0)
-        for i in range(7):
-            plt.plot(x[:, i])
-        plt.show()
+            plt.figure(12, figsize=(10, 10))
+            plt.clf()
+#            plt.suptitle('Improved PR scores')
 
+
+            prec_list = list(map(lambda k: 
+                data[k]['precision'] if 'vae' in k else \
+                data[k]['precision'], data.keys()))
+            rec_list = list(map(lambda k: 
+                data[k]['recall'] if 'vae' in k else \
+                data[k]['recall'], data.keys()))    
+    
+            prec_min = np.round(min(prec_list) - 0.5 * 10**(-2), 2)
+            prec_max = np.round(max(prec_list) + 0.5 * 10**(-2), 2)
+            rec_min = np.round(min(rec_list) - 0.5 * 10**(-2), 2)
+            rec_max = np.round(max(rec_list) + 0.5 * 10**(-2), 2)
+            
+            # ------------- Plot IPR results
+            xlim = (prec_min, prec_max)
+            ylim = (rec_min, rec_max)
+            limit_axis = False
+            plt.subplot(2, 2, 1)
+            for model_name in data.keys():
+                label = '{2}_n{0}_s{1}'.format(clusters, s, model_name)
+                if model_name in vae_group1:
+                    x = data[model_name]['precision']
+                    y = data[model_name]['recall']
+                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+#                    if show_legend:
+            plt.legend(loc='upper left')
+            if limit_axis:
+                plt.xlim((0.95, 1.001))
+                plt.ylim((0.4, 0.44))
+                plt.yticks(np.arange(0.4, 0.45, 0.01))
+            
+            plt.ylabel('recall')
+            
+            plt.subplot(2, 2, 2)
+            for model_name in data.keys():
+                if model_name in vae_group2:
+                    label = '{2}_n{0}_s{1}'.format(clusters, s, model_name)
+                    x = data[model_name]['precision']
+                    y = data[model_name]['recall']
+                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+#                    if show_legend:
+            plt.legend(loc='upper left')
+            if limit_axis:
+                plt.xlim((0.95, 1.001))
+                plt.ylim((0.4, 0.44))
+                plt.yticks(np.arange(0.4, 0.45, 0.01))
+            
+            plt.subplot(2, 2, 3)
+            for model_name in data.keys():
+                if model_name in gan_group1:
+#                            label = '{2}_n{0}_s{1}'.format(nhood, s, model_name)
+                    x = data[model_name]['precision']
+                    y = data[model_name]['recall']
+                    
+                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+#                    if show_legend:
+            plt.legend(loc='lower left')
+            if limit_axis:
+                plt.xlim((0.95-0.001, 1.001))
+                plt.ylim((0.4-0.006, 1.001))
+#                    plt.xticks(np.arange(0.95, 1.0, 0.025))
+            plt.xlabel('precision')
+            plt.ylabel('recall')
+            
+            plt.subplot(2, 2, 4)
+            for model_name in data.keys():
+                if model_name in gan_group2:
+                    label = '{2}_n{0}_s{1}'.format(clusters, s, model_name)
+                    x = data[model_name]['precision']
+                    y = data[model_name]['recall']
+                    plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+#                    if show_legend:
+            plt.legend(loc='lower left')
+            if limit_axis:
+                plt.xlim((0.95-0.001, 1.001))
+                plt.ylim((0.4-0.006, 1.001))
+            plt.xlabel('precision')
+                    
+            plt.tight_layout()
+            plt.subplots_adjust(hspace=0.3, wspace=0.3)
+            plt.savefig('PR_clusters{0}_s{1}_n_samples{2}'.format(
+                    clusters, s, n_points))
+            plt.show()
+            
+            
+        def plot_agg_gan_vae_pr():
+
+            clusters = 10
+            agg_fn = lambda x, y: x + y
+            fig2 = plt.figure(9, figsize=(10, 10))
+            plt.clf()
+            gs = fig2.add_gridspec(2, 2)
+            
+#            fig2.suptitle('Aggregated IPR scores, nhood = {0}, gan_smoothening = {1}, n_samples = {2}'.format(
+#                    nhood, s, n_samples)) #fontsize=16)
+            
+            vae_agg_results_g1 = []
+            vae_agg_results_g2 = []
+            gan_agg_results_g1 = []
+            gan_agg_results_g2 = []
+            for model_name in data.keys():
+                x = data[model_name]['precision']
+                y = data[model_name]['recall']
+            
+                if model_name in vae_group1:
+                    vae_agg_results_g1.append((model_name, agg_fn(x, y)))
+                if model_name in vae_group2:
+                    vae_agg_results_g2.append((model_name, agg_fn(x, y)))
+                elif model_name in gan_group1:
+                    gan_agg_results_g1.append((model_name, agg_fn(x, y)))
+                else:
+                    gan_agg_results_g2.append((model_name, agg_fn(x, y)))
+
+            vae_agg_results_g1 = sorted(vae_agg_results_g1, key=lambda x: x[1], reverse=True)
+            vae_agg_results_g2 = sorted(vae_agg_results_g2, key=lambda x: x[1], reverse=True)
+            vae_agg_g1_names, vae_agg_g1_res = zip(*vae_agg_results_g1)
+            vae_agg_g2_names, vae_agg_g2_res = zip(*vae_agg_results_g2)
+            
+            gan_agg_results_g1 = sorted(gan_agg_results_g1, key=lambda x: x[1], reverse=True)
+            gan_agg_results_g2 = sorted(gan_agg_results_g2, key=lambda x: x[1], reverse=True)
+            gan_agg_g1_names, gan_agg_g1_res = zip(*gan_agg_results_g1)
+            gan_agg_g2_names, gan_agg_g2_res = zip(*gan_agg_results_g2)
+            
+            xlim = (0, max(list(vae_agg_g1_res) + list(vae_agg_g2_res) +
+                           list(gan_agg_g1_res) + list(gan_agg_g2_res)) + 0.1)
+            f2_ax1 = fig2.add_subplot(gs[0, 0])
+            f2_ax1.set_yticks(np.arange(len(vae_agg_g1_names)) + 1)
+            f2_ax1.set_yticklabels(vae_agg_g1_names[::-1])
+            f2_ax1.set_xlim(xlim)
+            
+            f2_ax2 = fig2.add_subplot(gs[0, 1])
+            f2_ax2.set_yticks(np.arange(len(vae_agg_g2_names)) + 1)
+            f2_ax2.set_yticklabels(vae_agg_g2_names[::-1])
+            f2_ax2.set_xlim(xlim)
+     
+            f2_ax3 = fig2.add_subplot(gs[1, 0])
+            f2_ax3.set_yticks(np.arange(len(gan_agg_g1_names)) + 1)
+            f2_ax3.set_yticklabels(gan_agg_g1_names[::-1])
+            f2_ax3.set_xlim(xlim)
+            f2_ax3.set_xlabel('Aggregated PR score')
+            
+            f2_ax4 = fig2.add_subplot(gs[1, 1])
+            f2_ax4.set_yticks(np.arange(len(gan_agg_g2_names)) + 1)
+            f2_ax4.set_yticklabels(gan_agg_g2_names[::-1])
+            f2_ax4.set_xlim(xlim)
+            f2_ax4.set_xlabel('Aggregated PR score')
+            
+            for model_name in data.keys():
+                if model_name in vae_group1:
+                    agg_names = vae_agg_g1_names
+                    agg_res = vae_agg_g1_res
+                    ax = f2_ax1
+                elif model_name in vae_group2:
+                    agg_names = vae_agg_g2_names
+                    agg_res = vae_agg_g2_res
+                    ax = f2_ax2
+                elif model_name in gan_group1:
+                    agg_names = gan_agg_g1_names
+                    agg_res = gan_agg_g1_res
+                    ax = f2_ax3
+                else:
+                    agg_names = gan_agg_g2_names
+                    agg_res = gan_agg_g2_res
+                    ax = f2_ax4
+                    
+                i = len(agg_names) - agg_names.index(model_name)
+                res = agg_res[agg_names.index(model_name)]
+                
+                ax.barh(i, res, align='center', label=model_name, 
+                            height=0.5)
+                ax.legend(loc='upper left', framealpha=1)
+                    
+            plt.tight_layout()
+            plt.subplots_adjust(hspace=0.3, wspace=0.3)
+            plt.savefig('AggPR_clusters{0}_s{1}_n_samples{2}'.format(
+                    clusters, 10, n_points))
+            plt.show()
+        
+#        vae_eval_np = get_vae_samples('vae1', 2, n_points)
+#        
+#        plt.figure(1)
+#        plt.clf()
+#        plt.subplot(2, 2, 1)
+#        x = np.mean(ref_np.transpose(0, 2, 1), axis=0)
+#        for i in range(7):
+#            plt.plot(x[:, i])
+#            
+#        plt.subplot(2, 2, 2)
+#        x = np.mean(vae_eval_np.transpose(0, 2, 1), axis=0)
+#        for i in range(7):
+#            plt.plot(x[:, i])
+#            
+#        plt.subplot(2, 2, 3)
+#        x = moving_average_mean(np.mean(infogan_eval_np.transpose(0, 2, 1), axis=0), 5)
+#        for i in range(7):
+#            plt.plot(x[:, i])
+#            
+#        plt.subplot(2, 2, 4)
+#        x = np.mean(infogan_eval_np.transpose(0, 2, 1), axis=0)
+#        for i in range(7):
+#            plt.plot(x[:, i])
+#        plt.show()
+#
+#        ref_np = ref_np.reshape(-1, 7*79)
+#        vae_eval_np = vae_eval_np.reshape(-1, 7*79)
+#        infogan_eval_np = infogan_eval_np.reshape(-1, 7*79)
+#        
+#        prec, rec = prd.compute_prd_from_embedding(
+#            vae_eval_np, ref_np, num_clusters=20) 
+#        print(prd.prd_to_max_f_beta_pair(prec, rec))
+#        
+#        prec, rec = prd.compute_prd_from_embedding(
+#            infogan_eval_np, ref_np, num_clusters=20) 
+#        print(prd.prd_to_max_f_beta_pair(prec, rec))
         
         
         

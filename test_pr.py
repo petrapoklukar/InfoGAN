@@ -63,7 +63,7 @@ class TrajDataset(Dataset):
         
     def descale(self, data):
         unit_scaled = (data.cpu().numpy() + 1)/2
-        descaled = (unit_scaled.reshape(-1, 7, 79)) * (self.max - self.min) + self.min
+        descaled = (unit_scaled.reshape(-1, 7, 79) * (self.max - self.min)) + self.min
         return descaled
         
     def __len__(self):
@@ -123,9 +123,6 @@ def get_infogan_samples(config_name, ld, n_prd_samples, chpnt=''):
     # Get the sampled np array
     with torch.no_grad():
         z_noise = torch.empty((n_prd_samples, ld), device=device).uniform_(-1, 1)
-        print(z_noise.shape)
-        print(z_noise.dtype)
-        print(type(z_noise))
         eval_data = model(z_noise).detach()
         eval_np = test_dataset.descale(eval_data).reshape(-1, 7, 79)
     return eval_np
@@ -164,8 +161,8 @@ if __name__ == '__main__':
     yumi_gan_models = {model: index_to_ld(int(model.split('_')[0][-1])) \
         for model in gan_configs}
     yumi_vae_models = {'vae' + str(i): index_to_ld(i) for i in range(1, 10)}
-    evaluate = False
-    analyse = True
+    evaluate = True
+    analyse = False
     
     if analyse:
         n_samples = 2000
@@ -452,10 +449,11 @@ if __name__ == '__main__':
                          
     
     if evaluate:
-        max_ind = 10000
+        max_ind = 15750
         
-        for n_points in [2000, 5000]:
+        for n_points in [2000, 5000, 10000, 15000]:
             print('Chosen n_points: ', n_points)
+            nhood_sizes = [3, 20, 25, 30, 50, 100]
             base = np.random.choice(max_ind, n_points, replace=False)
             ref_np = get_ref_samples(base)
             
@@ -463,9 +461,10 @@ if __name__ == '__main__':
             for model, ld in yumi_gan_models.items():
                 print('InfoGAN model with ld: ', model, ld)
                 infogan_eval_np = get_infogan_samples(model, ld, n_points)
-                
-#                infogan_eval_np_avg15 = moving_average(infogan_eval_np, n=15)
+
+                infogan_eval_np_avg5 = moving_average(infogan_eval_np, n=5)                
                 infogan_eval_np_avg10 = moving_average(infogan_eval_np, n=10)
+                infogan_eval_np_avg15 = moving_average(infogan_eval_np, n=15)
                 
                 print('Starting to calculate InfoGAN PR....')
                 sess = tf.Session()
@@ -473,26 +472,42 @@ if __name__ == '__main__':
                     res0_gan = iprd.knn_precision_recall_features(
                                 ref_np.reshape(-1, 7*79), 
                                 infogan_eval_np.reshape(-1, 7*79), 
-                                nhood_sizes=[20,25,30,50],
+                                nhood_sizes=nhood_sizes,
                                 row_batch_size=500, col_batch_size=100, num_gpus=1)
                     
+                    
+                    res5_gan = iprd.knn_precision_recall_features(
+                                ref_np.reshape(-1, 7*79), 
+                                infogan_eval_np_avg5.reshape(-1, 7*79), 
+                                nhood_sizes=nhood_sizes,
+                                row_batch_size=500, col_batch_size=100, num_gpus=1)
                     
                     res10_gan = iprd.knn_precision_recall_features(
                                 ref_np.reshape(-1, 7*79), 
                                 infogan_eval_np_avg10.reshape(-1, 7*79), 
-                                nhood_sizes=[20,25,30,50],
+                                nhood_sizes=nhood_sizes,
+                                row_batch_size=500, col_batch_size=100, num_gpus=1)
+                    
+                    res15_gan = iprd.knn_precision_recall_features(
+                                ref_np.reshape(-1, 7*79), 
+                                infogan_eval_np_avg15.reshape(-1, 7*79), 
+                                nhood_sizes=nhood_sizes,
                                 row_batch_size=500, col_batch_size=100, num_gpus=1)
                     
                     
                 final_dict[model] = {
                         'res0_gan': res0_gan,
+                        'res5_gan': res5_gan,
                         'res10_gan': res10_gan,
+                        'res15_gan': res15_gan,
+                        'nhoods': nhood_sizes,
+                        'npoints': n_points
                         }
                     
             #_nhood file: res15 & res keys [5, 10, 25, 50]
             for model, ld in yumi_vae_models.items():
                 print('VAE model with ld: ', model, ld)
-                vae_eval_np = get_vae_samples('vae1', 2, n_points)
+                vae_eval_np = get_vae_samples(model, ld, n_points)
     
                 print('Starting to calculate InfoGAN PR....')
                 sess = tf.Session()
@@ -500,11 +515,14 @@ if __name__ == '__main__':
                     res0_vae = iprd.knn_precision_recall_features(
                                 ref_np.reshape(-1, 7*79), 
                                 vae_eval_np.reshape(-1, 7*79), 
-                                nhood_sizes=[15,20,25,30,50],
+                                nhood_sizes=nhood_sizes,
                                 row_batch_size=500, col_batch_size=100, num_gpus=1)
             
-                final_dict[model] = {'res0_vae': res0_vae}
+                final_dict[model] = {
+                    'res0_vae': res0_vae,
+                    'nhoods': nhood_sizes,
+                    'npoints': n_points}
                 
             print('Results ready ', final_dict)
-            with open('test_pr/ipr_results_nhoodFinal_{0}samples.pkl'.format(n_points), 'wb') as f:
+            with open('test_pr/ipr_results_nhood_{0}samples.pkl'.format(n_points), 'wb') as f:
                 pickle.dump(final_dict, f)
