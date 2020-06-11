@@ -164,9 +164,37 @@ if __name__ == '__main__':
     evaluate = True
     analyse = False
     
+    
+    if False:
+      nhoods = [3, 20, 25, 30, 50, 100]
+      nhood = nhoods.index(20)
+      vae_result_d = {'vae' + str(i): [] for i in range(1, 10)}
+      gan_result_d = {'gan' + str(i): [] for i in range(1, 10)}
+      for n_samples in [2000, 5000, 10000, 15000]:
+        with open('test_pr/ipr_results_nhood_{0}samples.pkl'.format(n_samples), 'rb') as f:
+          data_o = pickle.load(f)
+        
+        data = {}    
+        for key, value in data_o.items():
+          if 'infogan' in key:
+            new_key = key.split('_')[0][4:]
+            data[new_key] = value
+          else:
+            data[key] = value
+        
+        print('\n n_samples: ', str(n_samples))
+        for model in data:
+#          print('\n Model ', model)
+          if 'gan' in model:
+            m_data = data[model]['res5_gan']
+            gan_result_d[model].append((m_data['precision'][nhood], m_data['recall'][nhood]))
+          else:
+            m_data = data[model]['res0_vae']
+            vae_result_d[model].append((m_data['precision'][nhood], m_data['recall'][nhood]))
+    
     if analyse:
-        n_samples = 2000
-        with open('test_pr/ipr_results_nhoodFinal_{0}samples.pkl'.format(n_samples), 'rb') as f:
+        n_samples = 15000
+        with open('test_pr/ipr_results_nhood_{0}samples.pkl'.format(n_samples), 'rb') as f:
             data_o = pickle.load(f)
         
         data = {}    
@@ -176,6 +204,10 @@ if __name__ == '__main__':
                 data[new_key] = value
             else:
                 data[key] = value
+        
+
+                
+          
     
         # plot the results
         vae_group1 = ['vae' + str(i) for i in range(1, 6)]
@@ -453,7 +485,7 @@ if __name__ == '__main__':
         
         for n_points in [2000, 5000, 10000, 15000]:
             print('Chosen n_points: ', n_points)
-            nhood_sizes = [3, 20, 25, 30, 50, 100]
+            nhood_sizes = [3, 5, 7, 10, 12]
             base = np.random.choice(max_ind, n_points, replace=False)
             ref_np = get_ref_samples(base)
             
