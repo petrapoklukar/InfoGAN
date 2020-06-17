@@ -15,7 +15,8 @@ import matplotlib
 matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 from scipy.stats import rankdata
-
+from sklearn.neural_network import MLPRegressor
+from sklearn.model_selection import train_test_split
 
 def sample_fixed_noise(ntype, n_samples, noise_dim, var_range=1, device='cpu'):
     """Samples one type of noise only."""
@@ -26,6 +27,12 @@ def sample_fixed_noise(ntype, n_samples, noise_dim, var_range=1, device='cpu'):
         return torch.empty((n_samples, noise_dim), device=device).normal_()
     elif ntype == 'equidistant':
         noise = (np.arange(n_samples + 1) / n_samples) * 2*var_range - var_range
+        return torch.from_numpy(noise)
+    elif ntype == 'outside_prior':
+        random_loc = np.random.choice([np.random.uniform(-10, -5), np.random.uniform(5, 10)])
+        random_scale = np.random.uniform(0.5, 2)
+        noise = np.random.normal(loc=random_loc, scale=random_scale, 
+                         size=(n_samples, noise_dim))
         return torch.from_numpy(noise)
     else:
         raise ValueError('Noise type {0} not recognised.'.format(ntype))
@@ -38,6 +45,7 @@ def sample_neighbourhoods(ld, n_samples, n_local_samples, dgm_type, scale=0.05,
     around randomly sampled points in the latent space.
     """
     noise_type = 'normal' if dgm_type == 'vae' else 'uniform'
+    noise_type = 'outside_prior'
     linearity_dict = {}
     for i in range(n_samples):
         local_sample = sample_fixed_noise(noise_type, 1, ld).numpy()
@@ -61,23 +69,24 @@ def test_linearity(Z, S, split=True):
     """
     Fits a linear transformation S = AZ + B and calulcates its score.
     """
+    ld = Z.shape[-1]
+    min_params = 3 * ld + 3
+#    print(Z.shape)
     if split:
-#        ld = Z.shape[-1]
-#        min_params = 3 * ld + 3
-#        splitratio = min_params + min_params % 10
-        splitratio = int(len(Z) * 0.70)
-        Z_train, Z_test = Z[:splitratio, :], Z[splitratio:, :]
-        S_train, S_test = S[:splitratio, :], S[splitratio:, :]
-        reg = LinearRegression().fit(Z_train, S_train)
+        splitratio = min_params + 2
+#        splitratio = int(len(Z) * 0.70)
+        Z_train, Z_test = Z[:splitratio, :], Z[splitratio:2*splitratio, :]
+        S_train, S_test = S[:splitratio, :], S[splitratio:2*splitratio, :]
+#        print(S_train.shape, S_test.shape)
+        reg = LinearRegression(normalize=False).fit(Z_train, S_train)
         S_pred = reg.predict(Z_test)
-        mse = round(mean_squared_error(S_test, S_pred), 3)
-        reg_score = round(reg.score(Z_test, S_test), 3)
+        mse = np.sqrt(mean_squared_error(S_test, S_pred))
+        reg_score = reg.score(Z_test, S_test)
     else:
-        reg = LinearRegression().fit(Z, S)
+        reg = LinearRegression(normalize=False).fit(Z, S)
         S_pred = reg.predict(Z)
-        mse = round(mean_squared_error(S, S), 3)
-        reg_score = round(reg.score(Z, S), 3)
-    print(mse, reg_score)
+        mse = mean_squared_error(S, S_pred)
+        reg_score = reg.score(Z, S)
     return mse, reg_score
 
 def compute_rank():    
@@ -98,28 +107,113 @@ def compute_rank():
         
     return total_rank_min
 
+
+def nn_test_linearity(Z, S, hidden_layer_sizes, activation, max_iter):
+  Z_train, Z_test, S_train, S_test = train_test_split(
+      Z, S, random_state=1, test_size=0.1)
+  regr = MLPRegressor(hidden_layer_sizes=hidden_layer_sizes,
+                      activation=activation,
+                      random_state=1, 
+                      max_iter=max_iter)
+  regr.fit(Z_train, S_train)
+  S_train_pred = regr.predict(Z_train)
+  S_test_pred = regr.predict(Z_test)
+  score_train = regr.score(Z_train, S_train)
+  score_test = regr.score(Z_test, S_test)
+  mse_train = mean_squared_error(S_train, S_train_pred)
+  mse_test = mean_squared_error(S_test, S_test_pred)
+  return mse_train, score_train, mse_test, score_test
+  
+
 models = ['gan' + str(i) for i in range(1, 10)] + ['vae' + str(i) for i in range(1, 10)]
 
+# NN linearity
+if True:
+  lin_scores = {model: {'reg_score_train': 0, 'mse_train': 0, 
+                        'reg_score_test': 0, 'mse_test': 0} for model in models}
+  
+  for model in models:
+      with open('dataset/linearity_states/var_0_1/linearity_test_{0}.pkl'.format(model), 
+                'rb') as f:
+          data = pickle.load(f)
+      
+      for sample in range(data['num_points']):
+          key = '{:02d}'.format(sample)
+          Z = data['latent' + key]
+          S = data['state' + key][:, (0, 1, -1)]
+          mse_train, score_train, mse_test, score_test = nn_test_linearity(
+              Z, S, hidden_layer_sizes=[5, 5], activation='identity',
+              max_iter=500)
+          lin_scores[model]['mse_train'] += mse_train 
+          lin_scores[model]['mse_test'] += mse_test 
+          lin_scores[model]['reg_score_train'] += score_train
+          lin_scores[model]['reg_score_test'] += score_test
+      lin_scores[model]['mse_train'] /= data['num_points']
+      lin_scores[model]['mse_test'] /= data['num_points']
+#      lin_scores[model]['nll_mse'] = - np.round(np.log(lin_scores[model]['mse']), 3)
+      lin_scores[model]['reg_score_train'] /= data['num_points']
+      lin_scores[model]['reg_score_test'] /= data['num_points']
+#      lin_scores[model]['reg_score'] = np.round(lin_scores[model]['reg_score'], 3)
+
+# Samples from prior
+if False:  
+  models = ['gan' + str(i) for i in range(7, 10)] + ['vae' + str(i) for i in range(7, 10)]
+  lin_scores = {model: {'reg_score': 0, 'mse': 0} for model in models}
+  for model in models:
+          with open('dataset/linearity_states/general_linearity_test/general_linearity_test_{0}.pkl'.format(model), 
+                    'rb') as f:
+              data = pickle.load(f)
+          
+          print(model)
+          Z = data['actions']
+          S = data['states'][:, (0, 1, -1)]
+          mse, reg_score = test_linearity(Z, S, split=False)
+          lin_scores[model]['mse'] += mse 
+          lin_scores[model]['reg_score'] += reg_score 
+          lin_scores[model]['nll_mse'] = - np.round(np.log(lin_scores[model]['mse']), 3)
+  #            print(lin_scores[model]['reg_score'])
+#          lin_scores[model]['mse'] /= data['num_points']
+#          lin_scores[model]['reg_score'] /= data['num_points']
+  
+          plt.figure(1)
+          plt.clf()
+          for i in range(1, 9):
+            plt.subplot(2, 4, i)
+            plt.scatter(np.arange(len(data['states'][:, i-1])), 
+                        data['states'][:, i-1])
+            plt.title('States')
+          plt.show()
+          
+          plt.figure(2)
+          plt.clf()
+          for i in range(1, 7):
+            plt.subplot(2, 3, i)
+            plt.scatter(np.arange(len(data['actions'][:, i-1])), 
+                        data['actions'][:, i-1])
+            plt.title('Latents')
+          plt.show()
+
+# Samples with variance
 if False:
     lin_scores = {model: {'reg_score': 0, 'mse': 0} for model in models}
     
     for model in models:
-        with open('dataset/linearity_states/linearity_test_{0}.pkl'.format(model), 
+        with open('dataset/linearity_states/var_0_1/linearity_test_{0}.pkl'.format(model), 
                   'rb') as f:
             data = pickle.load(f)
         
-        print(model)
         for sample in range(data['num_points']):
             key = '{:02d}'.format(sample)
             Z = data['latent' + key]
-            S = data['state' + key]#[:, (0, 1, -1)]
+            S = data['state' + key][:, (0, 1, -1)]
             mse, reg_score = test_linearity(Z, S, split=True)
             lin_scores[model]['mse'] += mse 
             lin_scores[model]['reg_score'] += reg_score 
-#            print(lin_scores[model]['reg_score'])
         lin_scores[model]['mse'] /= data['num_points']
+        lin_scores[model]['nll_mse'] = - np.round(np.log(lin_scores[model]['mse']), 3)
         lin_scores[model]['reg_score'] /= data['num_points']
-
+        lin_scores[model]['reg_score'] = np.round(lin_scores[model]['reg_score'], 3)
+    
 if False:
     vae_group1 = ['vae' + str(i) for i in range(1, 6)]
     vae_group2 = ['vae' + str(i) for i in range(6, 10)]
@@ -138,6 +232,7 @@ if False:
             plt.bar(i, lin_scores[model][key], label=model)
     plt.legend(loc='lower right', framealpha=1)
     plt.ylim((0.99, 1.0))
+    plt.ylim(ylim)
         
     
     plt.subplot(2, 2, 2)
@@ -147,6 +242,7 @@ if False:
             plt.bar(i, lin_scores[model][key], label=model)
     plt.legend(loc='lower right', framealpha=1)
     plt.ylim((0.99, 1.0))
+    plt.ylim(ylim)
     
     plt.subplot(2, 2, 3)
     for model in lin_scores.keys():
@@ -178,14 +274,14 @@ if False:
     f2_ax1.set_yticks(np.arange(len(vae_sgroup1)) + 1)
     f2_ax1.set_yticklabels(vae_sgroup1[::-1])
     f2_ax1.set_xlim((0.99, 1.0))
-#    f2_ax1.set_xlim(xlim)
+    f2_ax1.set_xlim(xlim)
     
     vae_sgroup2 = sorted(vae_group2, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax2 = fig2.add_subplot(gs[0, 1])
     f2_ax2.set_yticks(np.arange(len(vae_sgroup2)) + 1)
     f2_ax2.set_yticklabels(vae_sgroup2[::-1])
     f2_ax2.set_xlim((0.99, 1.0))
-#    f2_ax2.set_xlim(xlim)
+    f2_ax2.set_xlim(xlim)
  
     gan_sgroup1 = sorted(gan_group1, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax3 = fig2.add_subplot(gs[1, 0])
@@ -198,7 +294,7 @@ if False:
     f2_ax4 = fig2.add_subplot(gs[1, 1])
     f2_ax4.set_yticks(np.arange(len(gan_sgroup2)) + 1)
     f2_ax4.set_yticklabels(gan_sgroup2[::-1])
-    f2_ax4.set_xlabel('MMD aggregated score')
+    f2_ax4.set_xlabel('R2 linearity score')
     f2_ax4.set_xlim(xlim)
     
     for model_name in lin_scores.keys():

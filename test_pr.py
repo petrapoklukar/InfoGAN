@@ -18,8 +18,8 @@ from itertools import groupby
 import InfoGAN_yumi as infogan
 import InfoGAN_models as models
 import matplotlib
-#matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
-matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
+matplotlib.use('Qt5Agg') # Must be before importing matplotlib.pyplot or pylab!
+#matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 import pickle
 import iprd_score as iprd 
@@ -161,16 +161,16 @@ if __name__ == '__main__':
     yumi_gan_models = {model: index_to_ld(int(model.split('_')[0][-1])) \
         for model in gan_configs}
     yumi_vae_models = {'vae' + str(i): index_to_ld(i) for i in range(1, 10)}
-    evaluate = True
-    analyse = False
+    evaluate = False
+    analyse = True
     
     
-    if False:
-      nhoods = [3, 20, 25, 30, 50, 100]
-      nhood = nhoods.index(20)
+    if True:
+      nhoods = [3, 5, 7, 10, 12] #[3, 20, 25, 30, 50, 100]
+      nhood = nhoods.index(7)
       vae_result_d = {'vae' + str(i): [] for i in range(1, 10)}
       gan_result_d = {'gan' + str(i): [] for i in range(1, 10)}
-      for n_samples in [2000, 5000, 10000, 15000]:
+      for n_samples in [15000]:
         with open('test_pr/ipr_results_nhood_{0}samples.pkl'.format(n_samples), 'rb') as f:
           data_o = pickle.load(f)
         
@@ -186,7 +186,7 @@ if __name__ == '__main__':
         for model in data:
 #          print('\n Model ', model)
           if 'gan' in model:
-            m_data = data[model]['res5_gan']
+            m_data = data[model]['res10_gan']
             gan_result_d[model].append((m_data['precision'][nhood], m_data['recall'][nhood]))
           else:
             m_data = data[model]['res0_vae']
@@ -268,22 +268,21 @@ if __name__ == '__main__':
             
             
                   
-        def plot_gan_vae_ipr(nhoods, smooth):
+        def plot_gan_vae_ipr(nhoods, smooth, fig=12):
 #            nhoods = ['5']#['', '5', '12', '20']
 #            smooth = ['0', '10']
 #            nhood = 20 #[20,25,30,50]
-            ni = [20, 25, 30, 50].index(int(nhoods[0]))
+            ni = [3, 5, 7, 10, 12].index(int(nhoods[0]))
             
-            plt.figure(12, figsize=(10, 10))
+            plt.figure(fig, figsize=(10, 10))
             plt.clf()
 #            plt.suptitle('Improved PR scores')
             for nhood in nhoods:
                 for s in smooth:
 #                    vae_res = 'res{0}_vae'.format(nhood)
-#                    gan_res = 'res{0}_gan{1}'.format(nhood, s)
                     vae_res = 'res0_vae'
-                    gan_res = 'res10_gan'
-                    s = 10
+                    gan_res = 'res{0}_gan'.format(s)
+#                    gan_res = 'res5_gan'
 
                     prec_list = list(map(lambda k: 
                         data[k][vae_res]['precision'][ni] if 'vae' in k else \
@@ -291,11 +290,12 @@ if __name__ == '__main__':
                     rec_list = list(map(lambda k: 
                         data[k][vae_res]['recall'][ni] if 'vae' in k else \
                         data[k][gan_res]['recall'][ni], data.keys()))    
-            
-                    prec_min = np.round(min(prec_list) - 0.5 * 10**(-2), 2)
-                    prec_max = np.round(max(prec_list) + 0.5 * 10**(-2), 2)
-                    rec_min = np.round(min(rec_list) - 0.5 * 10**(-2), 2)
-                    rec_max = np.round(max(rec_list) + 0.5 * 10**(-2), 2)
+                      
+                    margin = 0.3 * 10**(-1)
+                    prec_min = np.round(min(prec_list) - margin, 2)
+                    prec_max = np.round(max(prec_list) + margin, 2)
+                    rec_min = np.round(min(rec_list) - margin, 2)
+                    rec_max = np.round(max(rec_list) + margin, 2)
                     
                     # ------------- Plot IPR results
         #            gan_smooth = 'res_gan20'
@@ -312,10 +312,12 @@ if __name__ == '__main__':
 #                    if show_legend:
                     plt.legend(loc='upper left')
                     if limit_axis:
-                        plt.xlim((0.95, 1.001))
-                        plt.ylim((0.4, 0.44))
+                        plt.xlim(xlim)
+                        plt.ylim(ylim)
+#                        plt.xlim((0.95, 1.001))
+#                        plt.ylim((0.4, 0.44))
 #                    pyplot.locator_params(axis='y', nbins=5)
-                    plt.yticks(np.arange(0.4, 0.45, 0.01))
+#                    plt.yticks(np.arange(0.4, 0.45, 0.01))
                     
                     plt.ylabel('recall')
                     
@@ -329,9 +331,11 @@ if __name__ == '__main__':
 #                    if show_legend:
                     plt.legend(loc='upper left')
                     if limit_axis:
-                        plt.xlim((0.95, 1.001))
-                        plt.ylim((0.4, 0.44))
-                    plt.yticks(np.arange(0.4, 0.45, 0.01))
+#                        plt.xlim((0.95, 1.001))
+#                        plt.ylim((0.4, 0.44))
+                        plt.xlim(xlim)
+                        plt.ylim(ylim)
+#                    plt.yticks(np.arange(0.4, 0.45, 0.01))
                     
                     plt.subplot(2, 2, 3)
                     for model_name in data.keys():
@@ -343,8 +347,10 @@ if __name__ == '__main__':
 #                    if show_legend:
                     plt.legend(loc='lower left')
                     if limit_axis:
-                        plt.xlim((0.95-0.001, 1.001))
-                        plt.ylim((0.4-0.006, 1.001))
+#                        plt.xlim((0.95-0.001, 1.001))
+#                        plt.ylim((0.4-0.006, 1.001))
+                        plt.xlim(xlim)
+                        plt.ylim(ylim)
 #                    plt.xticks(np.arange(0.95, 1.0, 0.025))
                     plt.xlabel('precision')
                     plt.ylabel('recall')
@@ -359,8 +365,10 @@ if __name__ == '__main__':
 #                    if show_legend:
                     plt.legend(loc='lower left')
                     if limit_axis:
-                        plt.xlim((0.95-0.001, 1.001))
-                        plt.ylim((0.4-0.006, 1.001))
+#                        plt.xlim((0.95-0.001, 1.001))
+#                        plt.ylim((0.4-0.006, 1.001))
+                        plt.xlim(xlim)
+                        plt.ylim(ylim)
                     plt.xlabel('precision')
                     
             plt.tight_layout()
@@ -377,10 +385,9 @@ if __name__ == '__main__':
 #            vae_res = 'res{0}_vae'.format(nhood)
 #            gan_res = 'res{0}_gan{1}'.format(nhood, s)
             
-            ni = [20, 25, 30, 50].index(int(nhood))
+            ni = [3, 5, 7, 10, 12].index(int(nhood))
             vae_res = 'res0_vae'
-            gan_res = 'res10_gan'
-            s = 10
+            gan_res = 'res{0}_gan'.format(str(s))
     #        agg_fn = lambda x, y: np.sqrt(x**2 + y**2)
             agg_fn = lambda x, y: x + y
             fig2 = plt.figure(9, figsize=(10, 10))
