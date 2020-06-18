@@ -65,29 +65,37 @@ def random_ball(loc, scale, num_points, ld):
     return scale * (random_directions * random_radii).T + loc
 
 
-def test_linearity(Z, S, split=True):
+def test_linearity(Z, S, split=True, min_params=True):
     """
     Fits a linear transformation S = AZ + B and calulcates its score.
     """
     ld = Z.shape[-1]
-    min_params = 3 * ld + 3
-#    print(Z.shape)
     if split:
-        splitratio = min_params + 2
-#        splitratio = int(len(Z) * 0.70)
-        Z_train, Z_test = Z[:splitratio, :], Z[splitratio:2*splitratio, :]
-        S_train, S_test = S[:splitratio, :], S[splitratio:2*splitratio, :]
-#        print(S_train.shape, S_test.shape)
+        if min_params:
+            min_params = 3 * ld + 3
+            splitratio = min_params + 2
+            Z_train, Z_test = Z[:splitratio, :], Z[splitratio:2*splitratio, :]
+            S_train, S_test = S[:splitratio, :], S[splitratio:2*splitratio, :]
+        else:
+            splitratio = int(len(Z) * 0.70)
+            Z_train, Z_test = Z[:splitratio, :], Z[splitratio:, :]
+            S_train, S_test = S[:splitratio, :], S[splitratio:, :]
+        
         reg = LinearRegression(normalize=False).fit(Z_train, S_train)
-        S_pred = reg.predict(Z_test)
-        mse = np.sqrt(mean_squared_error(S_test, S_pred))
-        reg_score = reg.score(Z_test, S_test)
+
+        S_test_pred = reg.predict(Z_test)
+        mse_test = np.sqrt(mean_squared_error(S_test, S_test_pred))
+        score_test = reg.score(Z_test, S_test)
+        S_train_pred = reg.predict(Z_train)
+        mse_train = np.sqrt(mean_squared_error(S_train, S_train_pred))
+        score_train = reg.score(Z_train, S_train)
+        return mse_train, score_train, mse_test, score_test
     else:
         reg = LinearRegression(normalize=False).fit(Z, S)
         S_pred = reg.predict(Z)
         mse = mean_squared_error(S, S_pred)
         reg_score = reg.score(Z, S)
-    return mse, reg_score
+        return mse, reg_score
 
 def compute_rank():    
     key = 'reg_score'
@@ -128,7 +136,7 @@ def nn_test_linearity(Z, S, hidden_layer_sizes, activation, max_iter):
 models = ['gan' + str(i) for i in range(1, 10)] + ['vae' + str(i) for i in range(1, 10)]
 
 # NN linearity
-if True:
+if False:
   lin_scores = {model: {'reg_score_train': 0, 'mse_train': 0, 
                         'reg_score_test': 0, 'mse_test': 0} for model in models}
   
@@ -195,7 +203,8 @@ if False:
 
 # Samples with variance
 if False:
-    lin_scores = {model: {'reg_score': 0, 'mse': 0} for model in models}
+    lin_scores = {model: {'reg_score_train': 0, 'mse_train': 0,
+                          'reg_score_test': 0, 'mse_test': 0} for model in models}
     
     for model in models:
         with open('dataset/linearity_states/var_0_1/linearity_test_{0}.pkl'.format(model), 
@@ -206,23 +215,39 @@ if False:
             key = '{:02d}'.format(sample)
             Z = data['latent' + key]
             S = data['state' + key][:, (0, 1, -1)]
-            mse, reg_score = test_linearity(Z, S, split=True)
-            lin_scores[model]['mse'] += mse 
-            lin_scores[model]['reg_score'] += reg_score 
-        lin_scores[model]['mse'] /= data['num_points']
-        lin_scores[model]['nll_mse'] = - np.round(np.log(lin_scores[model]['mse']), 3)
-        lin_scores[model]['reg_score'] /= data['num_points']
-        lin_scores[model]['reg_score'] = np.round(lin_scores[model]['reg_score'], 3)
+            mse_train, score_train, mse_test, score_test = test_linearity(
+                Z, S, split=True, min_params=False)
+            lin_scores[model]['mse_train'] += (mse_train * 1000)
+            lin_scores[model]['mse_test'] += (mse_test * 1000)
+            lin_scores[model]['reg_score_train'] += score_train
+            lin_scores[model]['reg_score_test'] += score_test
+        lin_scores[model]['mse_train'] /= data['num_points']
+        lin_scores[model]['mse_test'] /= data['num_points']
+#        lin_scores[model]['nll_mse'] = - np.round(np.log(lin_scores[model]['mse']), 3)
+        lin_scores[model]['reg_score_train'] /= data['num_points']
+        lin_scores[model]['reg_score_train'] = np.round(lin_scores[model]['reg_score_train'], 3)
+        lin_scores[model]['reg_score_test'] /= data['num_points']
+        lin_scores[model]['reg_score_test'] = np.round(lin_scores[model]['reg_score_test'], 3)
+      
+        with open('linearity_test/linearity_npoints{0}_var{1}_ranks.pkl'.format(
+            str(20), str(0.1)), 'wb') as f:
+          pickle.dump(lin_scores, f)
+          
+    def print_result(d, key):
+        for model in d.keys():
+            print(model, d[model][key])
     
-if False:
+if True:
     vae_group1 = ['vae' + str(i) for i in range(1, 6)]
     vae_group2 = ['vae' + str(i) for i in range(6, 10)]
     gan_group1 = ['gan' + str(i) for i in range(1, 6)]
     gan_group2 = ['gan' + str(i) for i in range(6, 10)]
     
-    key = 'reg_score'
+    key = 'mse_test'
     ymin = min(lin_scores[model][key] for model in lin_scores.keys())
-    ylim = (ymin - ymin % 0.01, 1.0)
+#    ylim = (ymin - ymin % 0.01, 1.0)
+    ymax = max(lin_scores[model][key] for model in lin_scores.keys())
+    ylim = (ymin, ymax)
     plt.figure(1, figsize=(10, 10))
     plt.clf()
     plt.subplot(2, 2, 1)
@@ -231,8 +256,8 @@ if False:
             i = vae_group1.index(model)
             plt.bar(i, lin_scores[model][key], label=model)
     plt.legend(loc='lower right', framealpha=1)
-    plt.ylim((0.99, 1.0))
-    plt.ylim(ylim)
+#    plt.ylim((0.99, 1.0))
+#    plt.ylim(ylim)
         
     
     plt.subplot(2, 2, 2)
@@ -241,8 +266,8 @@ if False:
             i = vae_group2.index(model)
             plt.bar(i, lin_scores[model][key], label=model)
     plt.legend(loc='lower right', framealpha=1)
-    plt.ylim((0.99, 1.0))
-    plt.ylim(ylim)
+#    plt.ylim((0.99, 1.0))
+#    plt.ylim(ylim)
     
     plt.subplot(2, 2, 3)
     for model in lin_scores.keys():
@@ -250,7 +275,7 @@ if False:
             i = gan_group1.index(model)
             plt.bar(i, lin_scores[model][key], label=model)
     plt.legend(loc='lower right', framealpha=1)
-    plt.ylim(ylim)
+#    plt.ylim(ylim)
     
     plt.subplot(2, 2, 4)
     for model in lin_scores.keys():
@@ -258,43 +283,46 @@ if False:
             i = gan_group2.index(model)
             plt.bar(i, lin_scores[model][key], label=model)
     plt.legend(loc='lower right', framealpha=1)
-    plt.ylim(ylim)
+#    plt.ylim(ylim)
     plt.tight_layout()
     plt.subplots_adjust(hspace=0.3, wspace=0.3)
     plt.show()
     
     fig2 = plt.figure(9, figsize=(10, 10))
     plt.clf()
+    key = 'mse_test'
     xmin = min(lin_scores[model][key] for model in lin_scores.keys())
-    xlim = (xmin - xmin % 0.01, 1.0)
+#    xlim = (xmin - xmin % 0.01, 1.0)
+    xmax = 5
+    xlim = (0, xmax)
     gs = fig2.add_gridspec(2, 2)#, width_ratios=[1, 2])
     
     vae_sgroup1 = sorted(vae_group1, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax1 = fig2.add_subplot(gs[0, 0])
     f2_ax1.set_yticks(np.arange(len(vae_sgroup1)) + 1)
     f2_ax1.set_yticklabels(vae_sgroup1[::-1])
-    f2_ax1.set_xlim((0.99, 1.0))
+#    f2_ax1.set_xlim((0.99, 1.0))
     f2_ax1.set_xlim(xlim)
     
     vae_sgroup2 = sorted(vae_group2, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax2 = fig2.add_subplot(gs[0, 1])
     f2_ax2.set_yticks(np.arange(len(vae_sgroup2)) + 1)
     f2_ax2.set_yticklabels(vae_sgroup2[::-1])
-    f2_ax2.set_xlim((0.99, 1.0))
+#    f2_ax2.set_xlim((0.99, 1.0))
     f2_ax2.set_xlim(xlim)
  
     gan_sgroup1 = sorted(gan_group1, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax3 = fig2.add_subplot(gs[1, 0])
     f2_ax3.set_yticks(np.arange(len(gan_sgroup1)) + 1)
     f2_ax3.set_yticklabels(gan_sgroup1[::-1])
-    f2_ax3.set_xlabel('R2 linearity score')
+    f2_ax3.set_xlabel('MSE')
     f2_ax3.set_xlim(xlim)
     
     gan_sgroup2 = sorted(gan_group2, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax4 = fig2.add_subplot(gs[1, 1])
     f2_ax4.set_yticks(np.arange(len(gan_sgroup2)) + 1)
     f2_ax4.set_yticklabels(gan_sgroup2[::-1])
-    f2_ax4.set_xlabel('R2 linearity score')
+    f2_ax4.set_xlabel('MSE')
     f2_ax4.set_xlim(xlim)
     
     for model_name in lin_scores.keys():
@@ -314,9 +342,30 @@ if False:
         
         i = len(agg_names) - agg_names.index(model_name)
         
-        ax.barh(i, res, align='center', label=model_name, 
+        rects = ax.barh(i, res, align='center', label=model_name, 
                     height=0.5)
 #        ax.legend(loc='upper left', framealpha=1)
+
+        for rect in rects:
+           width = int(rect.get_width())
+           if width < 5:
+              xloc = 5
+              clr = 'black'
+              align = 'left'
+              xy_x = res
+           else:
+              # Shift the text to the left side of the right edge
+              xloc = -5
+              clr = 'white'
+              align = 'right'
+              xy_x = xmax
+            # Center the text vertically in the bar
+           yloc = rect.get_y() + rect.get_height() / 2
+           label = ax.annotate(str(np.round(res, 2)), xy=(xy_x, yloc),
+                                xytext=(xloc, 0), textcoords="offset points", 
+                                ha=align, va='center', color=clr, weight='bold', 
+                                clip_on=True)
+#           rect_labels.append(label)
         
     plt.tight_layout()
     plt.subplots_adjust(hspace=0.3, wspace=0.3)

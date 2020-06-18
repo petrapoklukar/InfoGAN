@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats
 import pickle
-from sklearn.linear_model import ARDRegression, LinearRegression
+from sklearn.linear_model import ARDRegression, LinearRegression, BayesianRidge
 
 
 models = ['gan' + str(i) for i in range(1, 10)] + ['vae' + str(i) for i in range(1, 10)]
@@ -50,6 +50,17 @@ with open('disentanglement_test/disentanglement_scores_MMDalpha15_pval0p001_dict
   dis_data = {}
   for model in dis_data_o.keys():
     dis_data[model] = dis_data_o[model]['mmd']
+    
+    
+# Linearity data      
+with open('linearity_test/linearity_npoints20_var0.1_ranks.pkl', 'rb') as k:
+  lin_data_o = pickle.load(k)
+  
+  lin_data = {}
+  for model in lin_data_o.keys():
+    lin_data[model] = [lin_data_o[model]['mse_test'], lin_data_o[model]['reg_score_test']]
+ 
+
 
 # Policy training perfomance
 with open('dataset/policy_performance/policy_training_performance.pkl', 'rb') as h:
@@ -66,15 +77,21 @@ with open('dataset/policy_performance/policy_training_performance.pkl', 'rb') as
 
 ard_data = []  
 for model in sorted(models):
-  features = list(dis_data[model]) + list(pr_data[model])
+  features = list(dis_data[model]) + list(pr_data[model]) \
+    + list(lin_data[model]) 
   ard_data.append(features)
 ard_data_np = np.array(ard_data)
 
 clf_mean = ARDRegression(compute_score=True, normalize=True)
 clf_mean.fit(ard_data_np, policy_data_mean_np)
-  
+br_mean = BayesianRidge().fit(ard_data_np, policy_data_mean_np)
+
 clf_max = ARDRegression(compute_score=True, normalize=True)
 clf_max.fit(ard_data_np, policy_data_max_np)
   
 print(clf_mean.coef_)
+print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
+
 print(clf_max.coef_)
+print(sorted(list(zip(sorted(models), clf_max.predict(ard_data_np))), key=lambda x: x[1]))
+
