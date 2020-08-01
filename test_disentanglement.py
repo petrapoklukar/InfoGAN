@@ -274,7 +274,9 @@ def compute_mmd_test(model_data, gts_data, n_sub_samples=100, p_value=0.005,
     assert(n_sub_samples <= n_inter_samples)
     n_factors = 3
     res_dict = {key: {factor: [] for factor in range(n_factors)} for key in model_data.keys()}
+    # Choose an intervention
     for e in range(n_inter + 1):
+        # Choose the latent dimension
         for key in [k for k in model_data.keys() if k !='info']:
             
             # Result factors corresponding to each intervention in the latent space
@@ -443,7 +445,7 @@ if __name__ == '__main__':
             pickle.dump(end_results, f)
      
         
-    if False:
+    if True:
 #        with open('disentanglement_test/VAE_disentanglement_scores_MMDalpha10_dict.pkl', 'rb') as f:
 #            vae_data = pickle.load(f)
 #            
@@ -457,7 +459,18 @@ if __name__ == '__main__':
             MMDalpha = 15
             p_val = 0.001
             
+        SMALL_SIZE = 12
+        MEDIUM_SIZE = 25
+        BIGGER_SIZE = 29
         
+        plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+        plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+        plt.rc('axes', labelsize=SMALL_SIZE)    # fontsize of the x and y labels
+        plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+        plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+        plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+        plt.rc('figure', titlesize=SMALL_SIZE + 6)  # fontsize of the figure title
+    
         # plot the results
         vae_group1 = ['vae' + str(i) for i in range(1, 6)]
         vae_group2 = ['vae' + str(i) for i in range(6, 10)]
@@ -477,7 +490,7 @@ if __name__ == '__main__':
         for model_name in vae_data.keys():
             if model_name in vae_group1:
                 x, y = vae_data[model_name][metric]
-                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
         plt.legend(loc='upper left', framealpha=0.1)
         plt.ylabel('disentangling recall')
         plt.xlim(xlim)
@@ -488,7 +501,7 @@ if __name__ == '__main__':
         for model_name in vae_data.keys():
             if model_name in vae_group2:
                 x, y = vae_data[model_name][metric]
-                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
         plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
         plt.legend(loc='lower right', framealpha=0.1)
         plt.ylim(ylim)
@@ -498,8 +511,8 @@ if __name__ == '__main__':
         for model_name in gan_data.keys():
             if model_name in gan_group1:
                 x, y = gan_data[model_name][metric]
-                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
-        plt.legend(framealpha=0.1)
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
+        plt.legend(loc='lower center', framealpha=0.1)
         plt.xlim(xlim)
         plt.ylim(ylim)
         plt.xlabel('disentangling precision')
@@ -510,7 +523,7 @@ if __name__ == '__main__':
         for model_name in gan_data.keys():
             if model_name in gan_group2:
                 x, y = gan_data[model_name][metric]
-                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+                plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
         plt.legend(loc='lower right', framealpha=0.1)
         plt.xlim(xlim)
         plt.ylim(ylim)

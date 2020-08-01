@@ -165,13 +165,13 @@ if __name__ == '__main__':
     analyse = True
     
     
-    if True:
+    if False:
       nhoods = [3, 5, 7, 10, 12] #[3, 20, 25, 30, 50, 100]
       nhood = nhoods.index(7)
       vae_result_d = {'vae' + str(i): [] for i in range(1, 10)}
       gan_result_d = {'gan' + str(i): [] for i in range(1, 10)}
       for n_samples in [15000]:
-        with open('test_pr/ipr_results_nhood_{0}samples.pkl'.format(n_samples), 'rb') as f:
+        with open('test_pr/nhoods_3_20_25_50_100/ipr_results_nhood_{0}samples.pkl'.format(n_samples), 'rb') as f:
           data_o = pickle.load(f)
         
         data = {}    
@@ -194,7 +194,7 @@ if __name__ == '__main__':
     
     if analyse:
         n_samples = 15000
-        with open('test_pr/ipr_results_nhood_{0}samples.pkl'.format(n_samples), 'rb') as f:
+        with open('test_pr/nhoods_3_20_25_50_100/ipr_results_nhood_{0}samples.pkl'.format(n_samples), 'rb') as f:
             data_o = pickle.load(f)
         
         data = {}    
@@ -234,7 +234,6 @@ if __name__ == '__main__':
         red = ['#f3bebf', '#e36869', '#d62728', '#6c1414']
         purple = ['#d9cae8', '#a783c9', '#7545a0', '#412759']
                   
-        
         def compute_rank(nhood, s):
             vae_res = 'res0_vae'
             gan_res = 'res{0}_gan'.format(str(s))
@@ -274,6 +273,19 @@ if __name__ == '__main__':
 #            nhood = 20 #[20,25,30,50]
             ni = [3, 5, 7, 10, 12].index(int(nhoods[0]))
             
+            SMALL_SIZE = 12
+            MEDIUM_SIZE = 25
+            BIGGER_SIZE = 29
+            
+            plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+            plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+            plt.rc('axes', labelsize=SMALL_SIZE)    # fontsize of the x and y labels
+            plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+            plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+            plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+            plt.rc('figure', titlesize=SMALL_SIZE + 6)  # fontsize of the figure title
+            
+
             plt.figure(fig, figsize=(10, 10))
             plt.clf()
 #            plt.suptitle('Improved PR scores')
@@ -308,7 +320,7 @@ if __name__ == '__main__':
                         if model_name in vae_group1:
                             x = data[model_name][vae_res]['precision'][ni]
                             y = data[model_name][vae_res]['recall'][ni]
-                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
 #                    if show_legend:
                     plt.legend(loc='upper left')
                     if limit_axis:
@@ -327,7 +339,7 @@ if __name__ == '__main__':
                             label = '{2}_n{0}_s{1}'.format(nhood, s, model_name)
                             x = data[model_name][vae_res]['precision'][ni]
                             y = data[model_name][vae_res]['recall'][ni]
-                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
 #                    if show_legend:
                     plt.legend(loc='upper left')
                     if limit_axis:
@@ -343,7 +355,7 @@ if __name__ == '__main__':
 #                            label = '{2}_n{0}_s{1}'.format(nhood, s, model_name)
                             x = data[model_name][gan_res]['precision'][ni]
                             y = data[model_name][gan_res]['recall'][ni]
-                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
 #                    if show_legend:
                     plt.legend(loc='lower left')
                     if limit_axis:
@@ -361,7 +373,7 @@ if __name__ == '__main__':
                             label = '{2}_n{0}_s{1}'.format(nhood, s, model_name)
                             x = data[model_name][gan_res]['precision'][ni]
                             y = data[model_name][gan_res]['recall'][ni]
-                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D')
+                            plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
 #                    if show_legend:
                     plt.legend(loc='lower left')
                     if limit_axis:

@@ -207,14 +207,14 @@ if False:
                           'reg_score_test': 0, 'mse_test': 0} for model in models}
     
     for model in models:
-        with open('dataset/linearity_states/var_0_1/linearity_test_{0}.pkl'.format(model), 
+        with open('dataset/linearity_states/var_0_2/linearity_test_{0}.pkl'.format(model), 
                   'rb') as f:
             data = pickle.load(f)
         
         for sample in range(data['num_points']):
             key = '{:02d}'.format(sample)
             Z = data['latent' + key]
-            S = data['state' + key][:, (0, 1, -1)]
+            S = data['state' + key]#[:, (0, 1, -1)]
             mse_train, score_train, mse_test, score_test = test_linearity(
                 Z, S, split=True, min_params=False)
             lin_scores[model]['mse_train'] += (mse_train * 1000)
@@ -230,7 +230,7 @@ if False:
         lin_scores[model]['reg_score_test'] = np.round(lin_scores[model]['reg_score_test'], 3)
       
         with open('linearity_test/linearity_npoints{0}_var{1}_ranks.pkl'.format(
-            str(20), str(0.1)), 'wb') as f:
+            str(50), str(0.2)), 'wb') as f:
           pickle.dump(lin_scores, f)
           
     def print_result(d, key):
@@ -288,12 +288,13 @@ if True:
     plt.subplots_adjust(hspace=0.3, wspace=0.3)
     plt.show()
     
+    # PAPER IMAGE
     fig2 = plt.figure(9, figsize=(10, 10))
     plt.clf()
     key = 'mse_test'
     xmin = min(lin_scores[model][key] for model in lin_scores.keys())
 #    xlim = (xmin - xmin % 0.01, 1.0)
-    xmax = 5
+    xmax = 4
     xlim = (0, xmax)
     gs = fig2.add_gridspec(2, 2)#, width_ratios=[1, 2])
     
@@ -302,28 +303,28 @@ if True:
     f2_ax1.set_yticks(np.arange(len(vae_sgroup1)) + 1)
     f2_ax1.set_yticklabels(vae_sgroup1[::-1])
 #    f2_ax1.set_xlim((0.99, 1.0))
-    f2_ax1.set_xlim(xlim)
+    f2_ax1.set_xlim((0, 4))
     
     vae_sgroup2 = sorted(vae_group2, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax2 = fig2.add_subplot(gs[0, 1])
     f2_ax2.set_yticks(np.arange(len(vae_sgroup2)) + 1)
     f2_ax2.set_yticklabels(vae_sgroup2[::-1])
 #    f2_ax2.set_xlim((0.99, 1.0))
-    f2_ax2.set_xlim(xlim)
+    f2_ax2.set_xlim((0, 4))
  
     gan_sgroup1 = sorted(gan_group1, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax3 = fig2.add_subplot(gs[1, 0])
     f2_ax3.set_yticks(np.arange(len(gan_sgroup1)) + 1)
     f2_ax3.set_yticklabels(gan_sgroup1[::-1])
     f2_ax3.set_xlabel('MSE')
-    f2_ax3.set_xlim(xlim)
+    f2_ax3.set_xlim((0, 45))
     
     gan_sgroup2 = sorted(gan_group2, key=lambda x: lin_scores[x][key], reverse=True)
     f2_ax4 = fig2.add_subplot(gs[1, 1])
     f2_ax4.set_yticks(np.arange(len(gan_sgroup2)) + 1)
     f2_ax4.set_yticklabels(gan_sgroup2[::-1])
     f2_ax4.set_xlabel('MSE')
-    f2_ax4.set_xlim(xlim)
+    f2_ax4.set_xlim((0, 45))
     
     for model_name in lin_scores.keys():
         res = lin_scores[model_name][key]
@@ -348,17 +349,39 @@ if True:
 
         for rect in rects:
            width = int(rect.get_width())
-           if width < 5:
+           print(width, model_name)
+           
+           if width < 5 and model_name in vae_group1 + vae_group2:
               xloc = 5
               clr = 'black'
               align = 'left'
               xy_x = res
+           elif width < 40 and model_name in gan_group1 + gan_group2:
+              xloc = 5
+              clr = 'black'
+              align = 'left'
+              xy_x = res
+              
+           elif width >= 45 and model_name in gan_group1 + gan_group2:
+              # Shift the text to the left side of the right edge
+              xloc = -5
+              clr = 'white'
+              align = 'right'
+              xy_x = 45
+          
+           elif width >= 40 and model_name in gan_group1 + gan_group2:
+              # Shift the text to the left side of the right edge
+              xloc = -5
+              clr = 'white'
+              align = 'right'
+              xy_x = res
+
            else:
               # Shift the text to the left side of the right edge
               xloc = -5
               clr = 'white'
               align = 'right'
-              xy_x = xmax
+              xy_x = 4
             # Center the text vertically in the bar
            yloc = rect.get_y() + rect.get_height() / 2
            label = ax.annotate(str(np.round(res, 2)), xy=(xy_x, yloc),

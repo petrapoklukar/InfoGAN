@@ -53,12 +53,12 @@ with open('disentanglement_test/disentanglement_scores_MMDalpha15_pval0p001_dict
     
     
 # Linearity data      
-with open('linearity_test/linearity_npoints20_var0.1_ranks.pkl', 'rb') as k:
+with open('linearity_test/linearity_npoints50_var0.2_ranks.pkl', 'rb') as k:
   lin_data_o = pickle.load(k)
   
   lin_data = {}
   for model in lin_data_o.keys():
-    lin_data[model] = [lin_data_o[model]['mse_test'], lin_data_o[model]['reg_score_test']]
+    lin_data[model] = [lin_data_o[model]['mse_test']]#, lin_data_o[model]['reg_score_test']]
  
 
 
@@ -76,11 +76,17 @@ with open('dataset/policy_performance/policy_training_performance.pkl', 'rb') as
     
 
 ard_data = []  
+agg_ard_data = []  
 for model in sorted(models):
   features = list(dis_data[model]) + list(pr_data[model]) \
-    + list(lin_data[model]) 
+    + list(lin_data[model])
+  features_agg = list(map(lambda x: [x[0] + x[1], x[2] + x[3], x[4]], [features]))
   ard_data.append(features)
+  agg_ard_data.append(features_agg[0])
 ard_data_np = np.array(ard_data)
+agg_ard_data_np = np.array(agg_ard_data)
+agg_clf_max = ARDRegression(compute_score=True, normalize=True)
+agg_clf_max.fit(agg_ard_data_np, policy_data_max_np)
 
 clf_mean = ARDRegression(compute_score=True, normalize=True)
 clf_mean.fit(ard_data_np, policy_data_mean_np)
@@ -89,9 +95,10 @@ br_mean = BayesianRidge().fit(ard_data_np, policy_data_mean_np)
 clf_max = ARDRegression(compute_score=True, normalize=True)
 clf_max.fit(ard_data_np, policy_data_max_np)
   
-print(clf_mean.coef_)
-print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
 
-print(clf_max.coef_)
-print(sorted(list(zip(sorted(models), clf_max.predict(ard_data_np))), key=lambda x: x[1]))
+print('Max reward; ', np.round(clf_max.coef_  * 100, 3))
+#print(sorted(list(zip(sorted(models), clf_max.predict(ard_data_np))), key=lambda x: x[1]))
+
+print('Mean reward; ',np.round(clf_mean.coef_ * 100, 3))
+#print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
 
