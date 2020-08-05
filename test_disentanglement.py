@@ -491,7 +491,7 @@ if __name__ == '__main__':
             if model_name in vae_group1:
                 x, y = vae_data[model_name][metric]
                 plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
-        plt.legend(loc='upper left', framealpha=0.1)
+        plt.legend(loc='upper left')#, framealpha=0.1)
         plt.ylabel('disentangling recall')
         plt.xlim(xlim)
         plt.ylim(ylim)
@@ -503,7 +503,7 @@ if __name__ == '__main__':
                 x, y = vae_data[model_name][metric]
                 plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
         plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
-        plt.legend(loc='lower right', framealpha=0.1)
+        plt.legend(loc='lower right')#, framealpha=0.1)
         plt.ylim(ylim)
         plt.xlim(xlim)
         
@@ -512,7 +512,7 @@ if __name__ == '__main__':
             if model_name in gan_group1:
                 x, y = gan_data[model_name][metric]
                 plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
-        plt.legend(loc='lower center', framealpha=0.1)
+        plt.legend(loc='lower center')#, framealpha=0.1)
         plt.xlim(xlim)
         plt.ylim(ylim)
         plt.xlabel('disentangling precision')
@@ -524,7 +524,7 @@ if __name__ == '__main__':
             if model_name in gan_group2:
                 x, y = gan_data[model_name][metric]
                 plt.scatter(x, y, alpha=0.7, label=model_name, marker='D', s=60)
-        plt.legend(loc='lower right', framealpha=0.1)
+        plt.legend(loc='lower right')#, framealpha=0.9)
         plt.xlim(xlim)
         plt.ylim(ylim)
         plt.yticks(ticks=[0.333, 0.666, 1.0], labels=['1/3', '2/3', '3/3'])
