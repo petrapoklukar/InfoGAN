@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats
 import pickle
-from sklearn.linear_model import ARDRegression, LinearRegression, BayesianRidge
+from sklearn.linear_model import ARDRegression, LinearRegression, BayesianRidge, Ridge
 import sklearn
 import copy
 import scipy.stats
@@ -122,8 +122,7 @@ def get_policy_data(model_list, policy_data_o):
 def get_eval_data_np(model_list):
   eval_metrics_ard_data = []  
   for model in sorted(model_list):
-      features = list(dis_data[model]) + list(pr_data[model]) \
-        + list(lin_data[model])
+      features = list(dis_data[model]) + list(lin_data[model]) + list(pr_data[model])
       eval_metrics_ard_data.append(features)
   eval_metrics_ard_data_np = np.array(eval_metrics_ard_data)
   return eval_metrics_ard_data_np
@@ -131,16 +130,36 @@ def get_eval_data_np(model_list):
 def get_eval_data_dict(model_list):
   eval_metrics_ard_data = {model: [] for model in model_list}
   for model in sorted(model_list):
-      features = list(dis_data[model]) + list(pr_data[model]) \
-        + list(lin_data[model])
+      features = list(dis_data[model]) + list(lin_data[model]) + list(pr_data[model]) 
       eval_metrics_ard_data[model] += features
-  feature_names = ['dip', 'dir', 'p', 'r', 'loc_lin',]
+  feature_names = ['dip', 'dir', 'loc_lin', 'p', 'r']
   return eval_metrics_ard_data, feature_names
   
 def add_training_params(eval_d, params):
   for model in eval_d.keys():
     eval_d[model] += params[model]
   return eval_d
+
+
+def compute_ard_with_scaler(input_array, policy_label_array, reward_label, 
+                       preprocessing, print_format='latex'):
+  if preprocessing == 'standard':
+    scaler = sklearn.preprocessing.StandardScaler()
+    input_array_preprocessed = scaler.fit_transform(input_array)
+  elif preprocessing == 'robust':
+    scaler = sklearn.preprocessing.RobustScaler(quantile_range=(25.0, 75.0))
+    input_array_preprocessed = scaler.fit_transform(input_array)
+  
+  clf = ARDRegression()
+  clf.fit(input_array_preprocessed, policy_label_array)
+  print('Preprocessing: ', preprocessing)
+  if print_format == 'latex': 
+    print('{0} reward: '.format(reward_label), 
+        ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), 
+                          list(clf.lambda_)))))
+  else:
+    print('?')
+
 
 
 # -------------------------------------------- #
@@ -152,25 +171,27 @@ policy_data_mean, policy_data_max = get_policy_data(models, policy_data_o)
 policy_data_mean_np = np.array(list(policy_data_mean.values()))
 policy_data_max_np = np.array(list(policy_data_max.values()))
 
+
 # Evaluate ard
-clf_mean = ARDRegression(compute_score=True, normalize=True)
-clf_mean.fit(np.array(list(eval_metrics_ard_data_d.values())), 
-             policy_data_mean_np)
-
-clf_max = ARDRegression(compute_score=True, normalize=True)
-clf_max.fit(np.array(list(eval_metrics_ard_data_d.values())), 
-            policy_data_max_np)
-
 print('ALL eval inputs,   ', f_names)
-print('Mean reward: ', 
-      ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), list(clf_mean.lambda_)))))
+# Mean label
+compute_ard_with_scaler(
+    np.array(list(eval_metrics_ard_data_d.values())), 
+    policy_data_mean_np, 'Mean', 'standard')
 
-#print('Mean reward; ', list(map(lambda x: round(x, 3), clf_mean.lambda_)))
-#print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
+compute_ard_with_scaler(
+    np.array(list(eval_metrics_ard_data_d.values())), 
+    policy_data_mean_np, 'Mean', 'robust')
 
-print('Max reward: ', 
-      ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), list(clf_max.lambda_)))))
-#print(sorted(list(zip(sorted(models), clf_max.predict(ard_data_np))), key=lambda x: x[1]))
+# Max label
+compute_ard_with_scaler(
+    np.array(list(eval_metrics_ard_data_d.values())), 
+    policy_data_max_np, 'Max', 'standard')
+
+compute_ard_with_scaler(
+    np.array(list(eval_metrics_ard_data_d.values())), 
+    policy_data_max_np, 'Max', 'robust')
+
 
 
 # -------------------------------------------- #
@@ -185,52 +206,59 @@ vae_policy_data_mean, vae_policy_data_max = get_policy_data(vae_models, policy_d
 vae_policy_data_mean_np = np.array(list(vae_policy_data_mean.values()))
 vae_policy_data_max_np = np.array(list(vae_policy_data_max.values()))
 
+print('\nVAE eval inputs, ', vae_eval_f_names)
+# Mean label
+compute_ard_with_scaler(
+    np.array(list(vae_eval_metrics_ard_data_d.values())), 
+    vae_policy_data_mean_np, 'Mean', 'standard')
 
-vae_eval_clf_mean = ARDRegression(compute_score=True, normalize=True)
-vae_eval_clf_mean.fit(np.array(list(vae_eval_metrics_ard_data_d.values())), 
-             vae_policy_data_mean_np)
+compute_ard_with_scaler(
+    np.array(list(vae_eval_metrics_ard_data_d.values())), 
+    vae_policy_data_mean_np, 'Mean', 'robust')
 
-vae_eval_clf_max = ARDRegression(compute_score=True, normalize=True)
-vae_eval_clf_max.fit(np.array(list(vae_eval_metrics_ard_data_d.values())), 
-            vae_policy_data_max_np)
+# Max label
+compute_ard_with_scaler(
+    np.array(list(vae_eval_metrics_ard_data_d.values())), 
+    vae_policy_data_max_np, 'Max', 'standard')
 
-print('\n\nVAE eval inputs,   ', vae_eval_f_names)
-print('Mean reward; ', 
-      ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), list(vae_eval_clf_mean.lambda_)))))
-#print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
-
-print('Max reward; ', 
-      ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), list(vae_eval_clf_max.lambda_)))))
-#print(sorted(list(zip(sorted(models), clf_max.predict(ard_data_np))), key=lambda x: x[1]))
+compute_ard_with_scaler(
+    np.array(list(vae_eval_metrics_ard_data_d.values())), 
+    vae_policy_data_max_np, 'Max', 'robust')
 
 
-vae_clf_mean = ARDRegression(compute_score=True, normalize=True)
-vae_clf_mean.fit(np.array(list(vae_all_ard_data_d.values())), 
-             vae_policy_data_mean_np)
+print('\nVAE all inputs, ', vae_all_f_names)
+# Mean label
+compute_ard_with_scaler(
+    np.array(list(vae_all_ard_data_d.values())), 
+    vae_policy_data_mean_np, 'Mean', 'standard')
 
-vae_clf_max = ARDRegression(compute_score=True, normalize=True)
-vae_clf_max.fit(np.array(list(vae_all_ard_data_d.values())), 
-            vae_policy_data_max_np)
+compute_ard_with_scaler(
+    np.array(list(vae_all_ard_data_d.values())), 
+    vae_policy_data_mean_np, 'Mean', 'robust')
 
-print('\nVAE all inputs,   ', vae_all_f_names)
-print('Mean reward; ', 
-      ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), list(vae_clf_mean.lambda_)))))
-#print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
+# Max label
+compute_ard_with_scaler(
+    np.array(list(vae_all_ard_data_d.values())), 
+    vae_policy_data_max_np, 'Max', 'standard')
 
-print('Max reward; ', 
-      ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), list(vae_clf_max.lambda_)))))
-#print(sorted(list(zip(sorted(models), clf_max.predict(ard_data_np))), key=lambda x: x[1]))
+compute_ard_with_scaler(
+    np.array(list(vae_all_ard_data_d.values())), 
+    vae_policy_data_max_np, 'Max', 'robust')
 
 
 # Calculating Pearsons coeff
 vae_all_data = np.array(list(vae_all_ard_data_d.values()))
+standardizer = sklearn.preprocessing.StandardScaler()
+vae_all_data_standard = standardizer.fit_transform(vae_all_data)
 
 vae_pearsons_mean, vae_pearsons_max = [], []
 for column in range(vae_all_data.shape[1]):
-  pear_mean = scipy.stats.pearsonr(vae_all_data[:, column], vae_policy_data_mean_np)
+  pear_mean = scipy.stats.pearsonr(vae_all_data_standard[:, column], 
+                                   vae_policy_data_mean_np)
   vae_pearsons_mean.append(list(pear_mean))
 #  pearsons_mean.append([round(pear_mean[0], 3), round(pear_mean[1], 3)])
-  pear_max = scipy.stats.pearsonr(vae_all_data[:, column], vae_policy_data_max_np)
+  pear_max = scipy.stats.pearsonr(vae_all_data_standard[:, column], 
+                                  vae_policy_data_max_np)
   vae_pearsons_max.append(list(pear_max))
 #  pearsons_max.append([round(pear_max[0], 3), round(pear_max[1], 3)])
 
@@ -238,7 +266,7 @@ vae_pearsons_mean_np = np.round(np.array(vae_pearsons_mean), 3)
 vae_pearsons_max_np = np.round(np.array(vae_pearsons_max), 3)
 
 print('\nVAE Pearsons R:   ', vae_all_f_names)
-print('Mean reward:\n')
+print('Mean reward:')
 print('R coeff; ', 
       ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(vae_pearsons_mean_np[:, 0])))))
 #print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
@@ -246,7 +274,7 @@ print('p value; ',
       ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(vae_pearsons_mean_np[:, 1])))))
 #print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
 
-print('Max reward:\n')
+print('\nMax reward:')
 print('R coeff; ', 
       ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(vae_pearsons_max_np[:, 0])))))
 #print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
@@ -271,72 +299,81 @@ gan_policy_data_mean, gan_policy_data_max = get_policy_data(gan_models, policy_d
 gan_policy_data_mean_np = np.array(list(gan_policy_data_mean.values()))
 gan_policy_data_max_np = np.array(list(gan_policy_data_max.values()))
 
-gan_eval_clf_mean = ARDRegression(compute_score=True, normalize=True)
-gan_eval_clf_mean.fit(np.array(list(gan_eval_metrics_ard_data_d.values())), 
-             gan_policy_data_mean_np)
+# Eval
+print('\n\nGAN eval inputs, ', gan_eval_f_names)
+# Mean label
+compute_ard_with_scaler(
+    np.array(list(gan_eval_metrics_ard_data_d.values())), 
+    gan_policy_data_mean_np, 'Mean', 'standard')
 
-gan_eval_clf_max = ARDRegression(compute_score=True, normalize=True)
-gan_eval_clf_max.fit(np.array(list(gan_eval_metrics_ard_data_d.values())), 
-            gan_policy_data_max_np)
+compute_ard_with_scaler(
+    np.array(list(gan_eval_metrics_ard_data_d.values())), 
+    gan_policy_data_mean_np, 'Mean', 'robust')
 
-print('\n\nGAN eval inputs,   ', gan_eval_f_names)
-print('Mean reward; ', 
-      ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), list(gan_eval_clf_mean.lambda_)))))
-#print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
+# Max label
+compute_ard_with_scaler(
+    np.array(list(gan_eval_metrics_ard_data_d.values())), 
+    gan_policy_data_max_np, 'Max', 'standard')
 
-print('Max reward; ',
-      ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), list(gan_eval_clf_max.lambda_)))))
-#print(sorted(list(zip(sorted(models), clf_max.predict(ard_data_np))), key=lambda x: x[1]))
+compute_ard_with_scaler(
+    np.array(list(gan_eval_metrics_ard_data_d.values())), 
+    gan_policy_data_max_np, 'Max', 'robust')
 
 
-gan_clf_mean = ARDRegression(compute_score=True, normalize=True)
-gan_clf_mean.fit(np.array(list(gan_all_ard_data_d.values())), 
-             gan_policy_data_mean_np)
+# All
+print('\nGAN all inputs, ', gan_all_f_names)
+# Mean label
+compute_ard_with_scaler(
+    np.array(list(gan_all_ard_data_d.values())), 
+    gan_policy_data_mean_np, 'Mean', 'standard')
 
-gan_clf_max = ARDRegression(compute_score=True, normalize=True)
-gan_clf_max.fit(np.array(list(gan_all_ard_data_d.values())), 
-            gan_policy_data_max_np)
+compute_ard_with_scaler(
+    np.array(list(gan_all_ard_data_d.values())), 
+    gan_policy_data_mean_np, 'Mean', 'robust')
 
-print('\nGAN all inputs,   ', gan_eval_f_names)
-print('Mean reward; ', 
-      ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), list(gan_clf_mean.lambda_)))))
-#print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
+# Max label
+compute_ard_with_scaler(
+    np.array(list(gan_all_ard_data_d.values())), 
+    gan_policy_data_max_np, 'Max', 'standard')
 
-print('Max reward; ', 
-      ' '.join(list(map(lambda z: '$\scnum{0}{1:.2e}{2}$ & '.format('{', z, '}'), list(gan_clf_max.lambda_)))))
-#print(sorted(list(zip(sorted(models), clf_max.predict(ard_data_np))), key=lambda x: x[1]))
-
+compute_ard_with_scaler(
+    np.array(list(gan_all_ard_data_d.values())), 
+    gan_policy_data_max_np, 'Max', 'robust')
 
 # Calculating Pearsons coeff
 gan_all_data = np.array(list(gan_all_ard_data_d.values()))
+standardizer = sklearn.preprocessing.StandardScaler()
+gan_all_data_standard = standardizer.fit_transform(gan_all_data)
 
-pearsons_mean, pearsons_max = [], []
+gan_pearsons_mean, gan_pearsons_max = [], []
 for column in range(gan_all_data.shape[1]):
-  pear_mean = scipy.stats.pearsonr(gan_all_data[:, column], gan_policy_data_mean_np)
-  pearsons_mean.append(list(pear_mean))
+  pear_mean = scipy.stats.pearsonr(gan_all_data_standard[:, column], 
+                                   gan_policy_data_mean_np)
+  gan_pearsons_mean.append(list(pear_mean))
 #  pearsons_mean.append([round(pear_mean[0], 3), round(pear_mean[1], 3)])
-  pear_max = scipy.stats.pearsonr(gan_all_data[:, column], gan_policy_data_max_np)
-  pearsons_max.append(list(pear_max))
+  pear_max = scipy.stats.pearsonr(gan_all_data_standard[:, column], 
+                                  gan_policy_data_max_np)
+  gan_pearsons_max.append(list(pear_max))
 #  pearsons_max.append([round(pear_max[0], 3), round(pear_max[1], 3)])
 
-pearsons_mean_np = np.round(np.array(pearsons_mean), 3)
-pearsons_max_np = np.round(np.array(pearsons_max), 3)
+gan_pearsons_mean_np = np.round(np.array(gan_pearsons_mean), 3)
+gan_pearsons_max_np = np.round(np.array(gan_pearsons_max), 3)
 
 print('\nGAN Pearsons R:   ', gan_all_f_names)
 print('Mean reward:\n')
 print('R coeff; ', 
-      ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(pearsons_mean_np[:, 0])))))
+      ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(gan_pearsons_mean_np[:, 0])))))
 #print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
 print('p value; ', 
-      ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(pearsons_mean_np[:, 1])))))
+      ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(gan_pearsons_mean_np[:, 1])))))
 #print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
 
 print('Max reward:\n')
 print('R coeff; ', 
-      ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(pearsons_max_np[:, 0])))))
+      ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(gan_pearsons_max_np[:, 0])))))
 #print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
 print('p value; ', 
-      ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(pearsons_max_np[:, 1])))))
+      ' '.join(list(map(lambda z: '${0:.3f}$ & '.format(z), list(gan_pearsons_max_np[:, 1])))))
 #print(sorted(list(zip(sorted(models), clf_mean.predict(ard_data_np))), key=lambda x: x[1]))
 
 
@@ -410,3 +447,66 @@ if False:
   
   
   
+
+
+  import numpy as np
+  import pylab as pl
+  from scipy import stats
+  from sklearn.linear_model import ARDRegression, LinearRegression
+  
+  ###############################################################################
+  # Generating simulated data with Gaussian weigthts
+  
+  # Parameters of the example
+  np.random.seed(0)
+  n_samples, n_features = 100, 100
+  # Create gaussian data
+  X = np.random.randn(n_samples, n_features)
+  # Create weigts with a precision lambda_ of 4.
+  lambda_ = 4.
+  w = np.zeros(n_features)
+  # Only keep 10 weights of interest
+  relevant_features = np.random.randint(0, n_features, 10)
+  for i in relevant_features:
+      w[i] = stats.norm.rvs(loc=0, scale=1. / np.sqrt(lambda_))
+  # Create noite with a precision alpha of 50.
+  alpha_ = 50.
+  noise = stats.norm.rvs(loc=0, scale=1. / np.sqrt(alpha_), size=n_samples)
+  # Create the target
+  y = np.dot(X, w) + noise
+  
+  ###############################################################################
+  # Fit the ARD Regression
+  clf = ARDRegression(compute_score=True)
+  clf.fit(X, y)
+  
+  ols = LinearRegression()
+  ols.fit(X, y)
+  
+  ###############################################################################
+  # Plot the true weights, the estimated weights and the histogram of the
+  # weights
+  pl.figure(figsize=(6, 5))
+  pl.title("Weights of the model")
+  pl.plot(clf.coef_, 'b-', label="ARD estimate")
+  pl.plot(ols.coef_, 'r--', label="OLS estimate")
+  pl.plot(w, 'g-', label="Ground truth")
+  pl.xlabel("Features")
+  pl.ylabel("Values of the weights")
+  pl.legend(loc=1)
+  
+  pl.figure(figsize=(6, 5))
+  pl.title("Histogram of the weights")
+  pl.hist(clf.coef_, bins=n_features, log=True)
+  pl.plot(clf.coef_[relevant_features], 5 * np.ones(len(relevant_features)),
+           'ro', label="Relevant features")
+  pl.ylabel("Features")
+  pl.xlabel("Values of the weights")
+  pl.legend(loc=1)
+  
+  pl.figure(figsize=(6, 5))
+  pl.title("Marginal log-likelihood")
+  pl.plot(clf.scores_)
+  pl.ylabel("Score")
+  pl.xlabel("Iterations")
+  pl.show()
