@@ -4,6 +4,8 @@
 Created on Tue Mar 17 10:42:12 2020
 
 @author: petrapoklukar
+
+Original InfoGAN implementation.
 """
 
 import torch.nn as nn
@@ -17,19 +19,24 @@ import matplotlib
 matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import matplotlib.pyplot as plt
 
-class InfoGAN_continuous_robot_traj(InfoGAN):
+class InfoGAN_general(InfoGAN):
     def __init__(self, config):
-        super(InfoGAN_continuous_robot_traj, self).__init__()
+        super(InfoGAN_general, self).__init__()
+        self.config = config
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         # Training parameters
         train_config = config['train_config']
-        self.Gnet_progress_nimg = train_config['Gnet_progress_nimg']
+        self.Gnet_progress_repeat = train_config['Gnet_progress_repeat']
+        self.Gnet_progress_nimg = int(
+            config['data_config']['structured_cat_dim'] * self.Gnet_progress_repeat)
         
         # Info parameters
         self.z_dim = self.data_config['usual_noise_dim']
+        self.cat_c_dim = self.data_config['structured_cat_dim']
         self.con_c_dim = self.data_config['structured_con_dim']
-        self.use_z_noise = self.data_config['use_usual_noise']
         self.fix_noise()
+        self.lambda_cat = train_config['lambda_cat']
         self.lambda_con = train_config['lambda_con']
         
 
@@ -40,60 +47,58 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
         """Initialises the loss."""
         # GAN Loss function
         self.bce_loss = torch.nn.BCELoss().to(self.device)  
+        # Discrete latent codes 
+        self.ce_loss = torch.nn.CrossEntropyLoss().to(self.device)
         # Continuous latent codes are model with the gaussian function below
-        
+
     
     def fix_noise(self):
         """Fixes noise to monitor the progress of the generator."""
-        z_noise, con_noise = self.ginput_noise(self.Gnet_progress_nimg)
+        batch_cat_codes = np.arange(self.cat_c_dim).repeat(self.Gnet_progress_repeat)
+        z_noise, cat_noise, con_noise = self.ginput_noise(
+                self.Gnet_progress_nimg, batch_cat_c_dim=batch_cat_codes)
         
         self.fixed_z_noise = z_noise
+        self.fixed_cat_noise = cat_noise
         self.fixed_con_noise = con_noise
 
     # ---------------------------- #
     # --- Monitoring functions --- #
-    # ---------------------------- #    
-    def plot_traj_grid(self, x, filename, directory, n=0):
-        """Plots a grid of (generated) images."""  
-        x = x.detach().cpu() # -1, n_joints, traj_length
+    # ---------------------------- #        
+    def sq_else_perm(self, img):
+        """Needeed for handling RGB vs greyscaled images."""
+        grayscale = True if img.shape[1] == 1 else False
+        return img.squeeze() if grayscale else img.permute(1,2,0)
+    
+    def plot_image_grid(self, images, filename, directory, n=0):
+        """Plots a grid of (generated) images."""
+        
         n_subplots = np.sqrt(n).astype(int) if n!=0 else self.Gnet_progress_nimg
         plot_range = n_subplots ** 2
+        images = self.sq_else_perm(images)
         for i in range(plot_range):
             plt.subplot(n_subplots, n_subplots, 1 + i)
             plt.axis('off')
-            for j in range(6):
-                plt.plot(x[i][j])
+            plt.imshow(images[i].detach().cpu().numpy())
         plt.savefig(directory + filename)
         plt.clf()
         plt.close()
         
-    
+
     def sample_fixed_noise(self, ntype, n_samples, noise_dim=None, var_range=1):
         """Samples one type of noise only"""
         if ntype == 'uniform':
-            return torch.empty((n_samples, noise_dim), 
-                               device=self.device).uniform_(-var_range, var_range)
+            return torch.empty((n_samples, noise_dim), device=self.device).uniform_(-1, 1)
         elif ntype == 'normal':
             return torch.empty((n_samples, noise_dim), device=self.device).normal_()
-        # Equidistant on interval [-var_range, var_range]
         elif ntype == 'equidistant':
-            return torch.from_numpy(
-                (np.arange(n_samples + 1) / n_samples) * 2*var_range - var_range)
+            return torch.from_numpy((np.arange(n_samples + 1) / n_samples) * 4 - 2)
         else:
             raise ValueError('Noise type {0} not recognised.'.format(ntype))
-   
+            
     # -------------------------- #
     # --- Training functions --- #
-    # -------------------------- #    
-    def g_forward(self, z_noise, con_noise):
-        """"Forward pass through the Gnet to allow different noise inputs."""
-        if self.use_z_noise:
-            out = self.Gnet((z_noise, con_noise))
-        else:
-            out = self.Gnet((con_noise, ))
-        return out
-        
-    
+    # -------------------------- #
     def ginput_noise(self, batch_size, batch_cat_c_dim=None):
         """
         Generates uninformed noise, structured discrete noise and 
@@ -102,11 +107,19 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
         # the usual uninformed noise
         z_noise = torch.empty((batch_size, self.z_dim), 
                               device=self.device).normal_() # b, x_dim
-                
+        
+        # structured discrete code noise
+        if batch_cat_c_dim is None:
+            # Generates a batch of random categorical codes if no is specified
+            batch_cat_c_dim = np.random.randint(0, self.cat_c_dim, batch_size)
+        cat_noise = np.zeros((batch_size, self.cat_c_dim)) 
+        cat_noise[range(batch_size), batch_cat_c_dim] = 1.0 # bs, dis_classes
+        cat_noise = torch.Tensor(cat_noise).to(self.device) 
+        
         # structured continuous code noise
         con_noise = torch.empty((batch_size, self.con_c_dim),
                                 device=self.device).uniform_(-1, 1)
-        return z_noise, con_noise
+        return z_noise, cat_noise, con_noise
     
     
     def train_model(self, train_dataloader, chpnt_path=''):
@@ -138,7 +151,7 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
                 
                 self.Doptim_lr_update_epoch = self.start_epoch - 1
                 self.new_Doptim_lr = self.Doptim_lr
-                
+
             self.init_optimisers()
             self.epoch_losses = []
             self.D_sgrad_norms, self.D_dgrad_norms = [], []
@@ -191,7 +204,7 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
         
                 # Usual discriminator Loss for real images
                 real_x = self.dinput_noise(real_x)
-                d_real_x = self.d_forward(real_x)     
+                d_real_x = self.d_forward(real_x)                
                 assert torch.sum(torch.isnan(d_real_x)) == 0, d_real_x
                 assert(d_real_x >= 0.).all(), d_real_x
                 assert(d_real_x <= 1.).all(), d_real_x
@@ -199,8 +212,8 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
                 D_x = d_real_x.mean().item()
                 
                 # Usual discriminator for fake images
-                z_noise, con_noise = self.ginput_noise(batch_size)
-                fake_x = self.g_forward(z_noise, con_noise).detach() 
+                z_noise, cat_noise, con_noise = self.ginput_noise(batch_size)
+                fake_x = self.Gnet((z_noise, cat_noise, con_noise)).detach() 
                 assert torch.sum(torch.isnan(fake_x)) == 0, fake_x
                 fake_x_input = self.dinput_noise(fake_x.detach())
                 d_fake_x = self.d_forward(fake_x_input)
@@ -208,7 +221,7 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
                 assert(d_fake_x <= 1.).all(), d_fake_x
                 d_fake_loss = self.bce_loss(d_fake_x, zeros)
                 D_G_z1 = d_fake_x.mean().item()
-        
+               
                 # Total discriminator loss. 
                 total_d_loss = d_real_loss + d_fake_loss 
                 total_d_loss.backward()
@@ -236,23 +249,29 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
                 self.optimiser_G.zero_grad()
                 
                 # Usual generator loss
-                z_noise, con_noise = self.ginput_noise(batch_size)
-                fake_x = self.g_forward(z_noise, con_noise)
+                z_noise, cat_noise, con_noise = self.ginput_noise(batch_size)
+                fake_x = self.Gnet(((z_noise, cat_noise, con_noise)))
                 fake_x_input = self.dinput_noise(fake_x)
                 d_fake_x = self.d_forward(fake_x_input)
                 g_loss = self.bce_loss(d_fake_x, ones)
                 D_G_z2 = d_fake_x.mean().item()
                
                 # Info loss for the Snet and Qnet
+                # - Resampled ground truth labels, see eq 5 in the paper
+                sampled_labels = np.random.randint(0, self.cat_c_dim, batch_size)
+                gt_labels = torch.LongTensor(sampled_labels).to(self.device)
+        
                 # - Resample noise, labels and code as generator input
-                z_noise, x§ = self.ginput_noise(batch_size)
+                z_noise, cat_noise, con_noise = self.ginput_noise(
+                        batch_size, batch_cat_c_dim=sampled_labels)
         
                 # - Push it through QNet
-                gen_x = self.g_forward(z_noise, con_noise)
-                q_con_mean, q_con_logvar = self.q_forward(gen_x) 
+                gen_x = self.Gnet((z_noise, cat_noise, con_noise))
+                q_cat_code, q_con_mean, q_con_logvar = self.q_forward(gen_x) 
         
-                G_i_loss = self.lambda_con * self.gaussian_loss(
-                    con_noise, q_con_mean, q_con_logvar)
+                G_i_loss = self.lambda_cat * self.ce_loss(q_cat_code, gt_labels) + \
+                    self.lambda_con * self.gaussian_loss(con_noise, q_con_mean, 
+                                                         q_con_logvar)
                 
                 total_g_loss = g_loss + G_i_loss 
                 total_g_loss.backward()
@@ -269,7 +288,7 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
                 epochs_G_gnet_norms.append(b_gnet_norms)
                 b_G_gnet_norm_total = np.around(np.linalg.norm(np.array(b_gnet_norms)), 
                                               decimals=3)
-                
+                              
                 b_qnet_norms = self.get_gradients(self.Qnet)
                 epochs_G_qnet_norms.append(b_qnet_norms)
                 b_G_qnet_norm_total = np.around(np.linalg.norm(np.array(b_qnet_norms)), 
@@ -291,7 +310,7 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
                 % (epoch_loss[2], epoch_loss[3]))
             print(
                 "\t[G_loss: %f] [G_i_loss: %f]"
-                % (epoch_loss[4], epoch_loss[5]))
+                % (epoch_loss[4], epoch_loss[4]))
             print(
                 "\t[D_x %f] [D_G_z1: %f] [D_G_z2: %f]"
                 % (D_x, D_G_z1, D_G_z2))
@@ -317,17 +336,19 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
             
             if (self.current_epoch + 1) % self.snapshot == 0:
                 # Save the checkpoint & logs, plot snapshot losses
-                self.save_checkpoint(epoch_loss, keep=True)
+                self.save_checkpoint(epoch_loss, keep=False)
                 self.save_logs()
 
                 # Plot snapshot losses
                 self.plot_snapshot_loss()
                 
             if (self.current_epoch + 1) % self.monitor_Gnet == 0:
-                gen_x = self.g_forward(self.fixed_z_noise, self.fixed_con_noise) 
-                
-                filename = 'genTraj' + str(self.current_epoch)
-                self.plot_traj_grid(gen_x, filename, self.train_dir, n=9)
+                gen_x = self.Gnet((self.fixed_z_noise, self.fixed_cat_noise,
+                                   self.fixed_con_noise)) 
+                gen_x_plotrescale = (gen_x + 1.) / 2.0 # Cause of tanh activation
+                   
+                filename = 'genImages' + str(self.current_epoch)
+                self.plot_image_grid(gen_x_plotrescale, filename, self.train_dir, n=100)
                 
         
         # ---------------------- #
@@ -345,7 +366,6 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
                 'Dnet': self.Dnet.state_dict(),
                 'Qnet': self.Qnet.state_dict()}, 
                 self.model_path)       
-        self.convert_model_dict(self.Gnet.state_dict())
         self.save_logs()
         
     # ---------------------------------- #
@@ -361,16 +381,16 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
             f.write( str(self.config) )
             f.writelines(['\n\n', 
                     '*- Model path: {0}\n'.format(self.model_path),
-                    '*- Optimiser G learning rate schedule: {0}\n'.format(
+                    '*- Generator learning rate schedule: {0}\n'.format(
                         self.init_Goptim_lr_schedule),
-                    '*- Optimiser D learning rate schedule: {0}\n'.format(
+                    '*- Discriminator learning rate schedule: {0}\n'.format(
                         self.init_Doptim_lr_schedule),
                     '*- Training epoch losses: (total_d_loss, total_g_loss, ' + 
                     'd_real_loss, d_fake_loss, g_loss, G_i_loss)\n'
                     ])
             f.writelines(list(map(
                     lambda t: '{0:>3} Epoch {7}: ({1:.2f}, {2:.2f}, {3:.2f}, {4:.2f}, {5:.2f}, {6:.2f})\n'.format(
-                            '', t[0], t[1], t[2], t[3], t[4], t[5], t[6]), 
+                            '', t[0], t[1], t[2], t[3], t[4], t[5]), 
                     epoch_losses)))
         print(' *- Model saved.\n')
     
@@ -490,21 +510,6 @@ class InfoGAN_continuous_robot_traj(InfoGAN):
         self.Qnet.train()
         assert(self.Gnet.training)
         
-    
-    def convert_model_dict(self, model_dict, save=True):
-        """
-        Converts the Gnet model_dict's keys to be able to use it in the final 
-        RL policy training. 
-        """
-        new_model_dict = model_dict.copy()
-        for key in model_dict.keys():
-            temp_key = key.split(".")[1:]
-            new_key = '.'.join(temp_key)
-            new_model_dict[new_key] = new_model_dict.pop(key)
-        if save:
-            torch.save(new_model_dict, self.save_path + '_4RL_model.pt')
-
-        
 
 # --------------- #
 # --- Testing --- #
@@ -513,19 +518,20 @@ if __name__ == '__main__':
     config = {
         'Gnet_config': {
                 'class_name': 'FullyConnectedGNet',
-                'latent_dim': 2,
-                'linear_dims': [128, 256, 512],
+                'latent_dim': 100,
+                'linear_dims': [256, 512, 1024],
                 'dropout': 0.3,
-                'output_dim': 7*79,
-                'output_reshape_dims': [-1, 7, 79],
+                'image_channels': 1,
+                'image_size': 32,
                 'bias': True
                 },
         
         'Snet_config': {
-                'class_name': 'FullyConnectedSNet',
+                'class_name': 'FullyConnectedSNet_Architecture2',
                 'linear_dims': [512, 256],
                 'dropout': 0,
-                'output_dim': 7*79,
+                'image_channels': 1,
+                'image_size': 32,
                 'bias': True
                 },
         
@@ -533,32 +539,30 @@ if __name__ == '__main__':
                 'class_name': 'FullyConnectedDNet',
                 'linear_dims': [512, 256],
                 'dropout': 0,
+                'image_channels': 1,
+                'image_size': 32,
                 'bias': True
                 },
                 
         'Qnet_config': {
                 'class_name': 'FullyConnectedQNet',
                 'last_layer_dim': 256, # see layer_dims in discriminator
-                'layer_dims': [256, 128],
-                'dropout': 0.3,
                 'bias': True
                 },
                 
         'data_config': {
-                'input_size': 7*79,
-                'n_joints': 7,
-                'traj_length': 79,
-                'usual_noise_dim': 1, 
-                'structured_con_dim': 1,
-                'structured_cat_dim': None,
-                'total_noise': 2,
-                'path_to_data': 'dataset/robot_trajectories/yumi_joint_pose.npy',
+                'input_size': None,
+                'usual_noise_dim': 62,
+                'structured_cat_dim': 10, 
+                'structured_con_dim': 2,
+                'total_noise': 74,
+                'path_to_data': '../datasets/MNIST'
                 },
 
         'train_config': {
-                'batch_size': 256,
-                'epochs': 25,
-                'snapshot': 10, 
+                'batch_size': 128,
+                'epochs': 100,
+                'snapshot': 20, 
                 'console_print': 1,
                 'optim_type': 'Adam',
                 'Goptim_lr_schedule': [(0, 2e-4)],
@@ -570,33 +574,24 @@ if __name__ == '__main__':
                 
                 'input_noise': False,
                 'input_variance_increase': None, 
-                'Dnet_update_step': 1, 
-                'monitor_Gnet': 5, 
-                'Gnet_progress_nimg': 100,
+                'Dnet_update_step': 1,
+                'monitor_Gnet': 1, 
+                'Gnet_progress_nimg': 100, 
                 
-                'grad_clip': True, 
-                'Snet_D_grad_clip': 100, 
-                'Dnet_D_grad_clip': 100, 
-                'Gnet_G_grad_clip': 100, 
-                'Snet_G_grad_clip': 100, 
-                'Qnet_G_grad_clip': 100, 
+                'grad_clip': False, 
+                'Snet_D_grad_clip': None, 
+                'Dnet_D_grad_clip': None, 
+                'Gnet_G_grad_clip': None, 
+                'Snet_G_grad_clip': None, 
+                'Qnet_G_grad_clip': None, 
                 
-                'lambda_con': 1., 
+                'lambda_cat': 1,
+                'lambda_con': 0.1, 
                 
-                'filename': 'infogan',
+                'filename': 'gan',
                 'random_seed': 1201,
-                },
-                
-        'eval_config': {
-                'filepath': 'models/{0}/infogan_model.pt',
-                'savefig_path': 'models/{0}/Testing/{1}.png',
-                'load_checkpoint': False,
-                'n_con_test_samples': 100,
-                'n_con_repeats': 3,
-                'con_var_range': 2,
-                'n_prd_samples': 1000
+                'exp_dir': 'models/DUMMY'
                 }
         }
-
     
-    model = InfoGAN_continuous_robot_traj(config)
+    model = InfoGAN_general(config)
